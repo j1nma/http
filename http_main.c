@@ -6,18 +6,16 @@
 #include "http_parser.h"
 
 #define BUFFER_SIZE 256
+#define CRLF "\r\n"
 
 int main(int argc, char **argv)
 {
     char buf[BUFFER_SIZE] = "",
-         *delimeter = "\n",
+         *delimeter = CRLF,
          *p = buf;
 
     struct http_parser parser;
     http_parser_init(&parser);
-
-    parser.request = malloc(sizeof(struct http_request));
-    parser.request->header_map = hashmap_new();
 
     FILE *fp = argc > 1 ? fopen(argv[1], "r") : stdin;
 
@@ -33,8 +31,7 @@ int main(int argc, char **argv)
 
         while (p)
         {
-            printf("%s\n", p);
-            http_parser_feed(&parser, p);
+            http_parser_feed_request_line(&parser, p);
             p = strtok(NULL, delimeter); /* get remaining tokens */
         }
     }
