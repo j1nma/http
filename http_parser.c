@@ -5,7 +5,7 @@
 #include "http_parser.h"
 
 char *request_methods[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"};
-char *protocol_versions[] = {"HTTP_1_0", "HTTP_1_1"};
+char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
 #define str(s) #s
 
@@ -81,6 +81,7 @@ http_parser_feed(struct http_parser *p, const char *s)
         if (method(p, s))
         {
             p->state = parser_uri;
+            printf("found method: %s\n", p->request->method_token);
         }
         else
         {

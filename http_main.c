@@ -10,7 +10,7 @@
 int main(int argc, char **argv)
 {
     char buf[BUFFER_SIZE] = "",
-         *delimeter = " ",
+         *delimeter = "\n",
          *p = buf;
 
     struct http_parser parser;
