@@ -49,6 +49,8 @@ enum parser_state
     parser_uri,
     parser_protocol_version,
     parser_version,
+    parser_space_character,
+    parser_empty_line,
     //  parser_method,
     // /** reading number of methods */
     // parser_nmethods,
