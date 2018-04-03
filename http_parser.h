@@ -75,9 +75,6 @@ void http_parser_init(struct http_parser *parser);
    equal to the message body length is read or the connection is closed.  */
 int http_parser_parse(struct http_parser *parser, FILE *fp);
 
-/** feed a string to parser. return true if finished  */
-enum parser_state http_parser_feed(struct http_parser *parser, const char *s);
-
 int http_parser_feed_line(struct http_parser *parser, const char *line);
 
 /** feed a request line  */
