@@ -4,8 +4,24 @@
 
 #include "http_parser.h"
 
+#define BUFFER_SIZE 256
+#define CRLF "\r\n"
+
 char *request_methods[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"};
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
+
+static int calcParity(uint8_t *ptr, ssize_t size)
+{
+    unsigned char b = 0;
+    int i;
+
+    for (i = 0; i < size; i++)
+    {
+        b ^= ptr[i];
+    }
+
+    return b;
+}
 
 int method(struct http_parser *p, const char *s)
 {
@@ -87,12 +103,43 @@ extern void
 http_parser_init(struct http_parser *p)
 {
     struct http_parser parser;
-    parser.state = parser_method;
-    parser.remaining = 0;
+    parser.state = parser_request_line;
     parser.request = malloc(sizeof(parser.request));
     parser.request->header_map = hashmap_new();
 
     *p = parser;
+}
+
+void http_parser_parse(struct http_parser *parser, FILE *fp)
+{
+
+    char buf[BUFFER_SIZE] = "";
+    char *delimeter = CRLF;
+    char *line = buf;
+
+    while (fgets(buf, sizeof(buf), fp) != NULL)
+    {
+        line = strtok(buf, delimeter);
+
+        while (line)
+        {
+            http_parser_feed_request_line(&parser, line);
+            line = strtok(NULL, delimeter); /* get remaining tokens */
+        }
+    }
+
+    if (ferror(fp))
+    {
+        puts("I/O error when reading.");
+    }
+    else if (feof(fp))
+    {
+        puts("End of file reached successfully.");
+    }
+    if (fp != stdin)
+    {
+        fclose(fp); /* close file if not stdin */
+    }
 }
 
 extern enum parser_state
@@ -248,4 +295,73 @@ const char *parse_error(enum parser_state state)
     }
 
     return error_message;
+}
+
+void http_parser_print_information(struct http_parser *parser)
+{
+
+    struct http_request *request = parser->request;
+    header_map_t header_fields_map = request->header_map;
+
+    int error;
+
+    /** the method (section 3.1.1 Request Line of RFC7230) **/
+    printf("%s", request->method_token);
+    printf("\t");
+
+    /** the host that must be used to make the connection (uri-host according to section 2.7. Resource Identifiers of RFC7230) **/
+    char *host;
+
+    error = hashmap_get(header_fields_map, "Host", (void **)(&host));
+    assert(error == MAP_OK);
+
+    printf("%s", host);
+    printf("\t");
+
+    /** the port where the connection will be made (decimal) **/
+    strtok(host, ":");
+    char *port = strtok(NULL, ":");
+    if (port == NULL)
+    {
+        fprintf(stderr, "Port not found on host.\n");
+    }
+    else
+    {
+        printf("%s", port);
+        printf("\t");
+    }
+
+    /** the request-target in form origin-form (section 5.3 Request Target of RFC7230) **/
+    char *request_uri = request->uri;
+    char *request_target;
+
+    strtok(request_uri, "http://");
+    request_target = strtok(NULL, "/");
+    if (request_target == NULL)
+    {
+        fprintf(stderr, "Request-target not found on host.\n");
+    }
+    else
+    {
+        printf("/%s", request_target);
+        printf("\t");
+    }
+
+    printf("%s", request_target);
+    printf("\t");
+
+    /** the number of bytes of message body (decimal) **/
+    char *message_body_bytes;
+    error = hashmap_get(header_fields_map, "Content-Length", (void **)(&message_body_bytes));
+    if (error == MAP_MISSING)
+    {
+        message_body_bytes = "0";
+    }
+
+    printf("%s", message_body_bytes);
+    printf("\t");
+
+    /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
+    printf("%X", calcParity(request->body,sizeof(request->body)));
+    printf("\t");
 }

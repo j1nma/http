@@ -35,13 +35,17 @@ struct http_request
 
 enum parser_state
 {
-    parser_method,
-    parser_uri,
-    parser_protocol_version,
+    parser_request_line,
     parser_header_fields,
     parser_empty_line,
     parser_message_body,
+
+    parser_method,
+    parser_uri,
+    parser_protocol_version,
+
     parser_done,
+
     parser_error_unsupported_method,
     parser_error_unsupported_uri,
     parser_error_unsupported_protocol_version,
@@ -56,20 +60,30 @@ struct http_parser
     struct http_request *request;
 
     enum parser_state state;
-
-    /* methods remaining to be read */
-    uint8_t remaining;
+    
 };
 
-void http_parser_init(struct http_parser *p);
+/** initialize parser **/
+void http_parser_init(struct http_parser *parser);
+
+/** The normal procedure for parsing an HTTP message is to read the
+   start-line into a structure, read each header field into a hash table
+   by field name until the empty line, and then use the parsed data to
+   determine if a message body is expected.  If a message body has been
+   indicated, then it is read as a stream until an amount of octets
+   equal to the message body length is read or the connection is closed.  */
+void http_parser_parse(struct http_parser *parser, FILE *fp);
 
 /** feed a string to parser. return true if finished  */
-enum parser_state http_parser_feed(struct http_parser *p, const char *s);
+enum parser_state http_parser_feed(struct http_parser *parser, const char *s);
 
 /** feed a request line  */
-enum parser_state http_parser_feed_request_line(struct http_parser *p, char *line);
+enum parser_state http_parser_feed_request_line(struct http_parser *parser, char *line);
 
 /** get error message from enum name **/
-const char * parse_error(enum parser_state state);
+const char *parse_error(enum parser_state state);
+
+/** print parser information **/
+void http_parser_print_information(struct http_parser *parser);
 
 #endif
