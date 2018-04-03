@@ -46,6 +46,8 @@ enum parser_state
 
     parser_done,
 
+    parser_error_request_line,
+
     parser_error_unsupported_method,
     parser_error_unsupported_uri,
     parser_error_unsupported_protocol_version,
@@ -60,7 +62,6 @@ struct http_parser
     struct http_request *request;
 
     enum parser_state state;
-    
 };
 
 /** initialize parser **/
@@ -72,15 +73,17 @@ void http_parser_init(struct http_parser *parser);
    determine if a message body is expected.  If a message body has been
    indicated, then it is read as a stream until an amount of octets
    equal to the message body length is read or the connection is closed.  */
-void http_parser_parse(struct http_parser *parser, FILE *fp);
+int http_parser_parse(struct http_parser *parser, FILE *fp);
 
 /** feed a string to parser. return true if finished  */
 enum parser_state http_parser_feed(struct http_parser *parser, const char *s);
 
-/** feed a request line  */
-enum parser_state http_parser_feed_request_line(struct http_parser *parser, char *line);
+int http_parser_feed_line(struct http_parser *parser, const char *line);
 
-/** get error message from enum name **/
+/** feed a request line  */
+int http_parser_feed_request_line(struct http_parser *parser, char *line);
+
+/** get error message from enum parser_state **/
 const char *parse_error(enum parser_state state);
 
 /** print parser information **/

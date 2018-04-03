@@ -18,9 +18,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    http_parser_parse(&parser, fp);
+    int error = http_parser_parse(&parser, fp);
+
+    if (error != 0)
+    {
+        return 1;
+    }
 
     http_parser_print_information(&parser);
-
+    
     return 0;
 }

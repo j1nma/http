@@ -110,12 +110,13 @@ http_parser_init(struct http_parser *p)
     *p = parser;
 }
 
-void http_parser_parse(struct http_parser *parser, FILE *fp)
+int http_parser_parse(struct http_parser *parser, FILE *fp)
 {
 
     char buf[BUFFER_SIZE] = "";
     char *delimeter = CRLF;
     char *line = buf;
+    int error = 0;
 
     while (fgets(buf, sizeof(buf), fp) != NULL)
     {
@@ -123,8 +124,13 @@ void http_parser_parse(struct http_parser *parser, FILE *fp)
 
         while (line)
         {
-            http_parser_feed_request_line(&parser, line);
-            line = strtok(NULL, delimeter); /* get remaining tokens */
+            error = http_parser_feed_line(parser, line);
+            if (error == 1)
+            {
+                fprintf(stderr, "Error: parsing line\n");
+                return 1;
+            }
+            line = strtok(NULL, delimeter);
         }
     }
 
@@ -140,6 +146,43 @@ void http_parser_parse(struct http_parser *parser, FILE *fp)
     {
         fclose(fp); /* close file if not stdin */
     }
+
+    return 0;
+}
+
+int http_parser_feed_line(struct http_parser *parser, const char *line)
+{
+    switch (parser->state)
+    {
+    case parser_request_line:
+        parser->state = parser_method;
+        int error = http_parser_feed_request_line(parser, line);
+        if (error == 1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+        break;
+
+    case parser_header_fields:
+
+        break;
+    case parser_empty_line:
+
+        break;
+    case parser_message_body:
+
+        break;
+    case parser_done:
+    case parser_error_unsupported_version:
+        // nada que hacer, nos quedamos en este estado
+        break;
+    default:
+        fprintf(stderr, "unknown state %d\n", parser->state);
+        abort();
+    }
+
+    return parser->state;
 }
 
 extern enum parser_state
@@ -230,30 +273,85 @@ http_parser_feed(struct http_parser *p, const char *s)
     return p->state;
 }
 
-enum parser_state http_parser_feed_request_line(struct http_parser *parser, char *line)
+int http_parser_feed_request_line(struct http_parser *parser, char *line)
 {
 
-    char buf[256] = "",
-         *delimeter = " ",
-         *p = buf;
+    char buf[BUFFER_SIZE] = "";
+    char *delimeter = " ";
+    char *token = buf;
 
-    p = strtok(line, delimeter);
+    token = strtok(line, delimeter);
 
-    if (p == NULL)
+    if (token == NULL)
     {
         fprintf(stderr, "Error: could not parse request line.\n");
-        parser->state = parser_error_unsupported_method;
-        return parser->state;
+        parser->state = parser_error_request_line;
+        return 1;
     }
 
-    while (p)
+    while (token != NULL)
     {
-        // printf("%s\n", p);
-        http_parser_feed(parser, p);
-        p = strtok(NULL, delimeter); /* get remaining tokens */
+
+        switch (parser->state)
+        {
+        case parser_method:
+            if (method(parser, token))
+            {
+                parser->state = parser_uri;
+            }
+            else
+            {
+                parser->state = parser_error_unsupported_method;
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return 1;
+            }
+            break;
+
+        case parser_uri:
+            if (uri(parser, token))
+            {
+                parser->state = parser_protocol_version;
+            }
+            else
+            {
+                parser->state = parser_error_unsupported_uri;
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return 1;
+            }
+
+            break;
+        case parser_protocol_version:
+            if (protocol_version(parser, token))
+            {
+                parser->state = parser_done;
+            }
+            else
+            {
+                parser->state = parser_error_unsupported_protocol_version;
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return 1;
+            }
+            break;
+        case parser_done:
+        case parser_error_unsupported_version:
+            break;
+        default:
+            fprintf(stderr, "Unknown state: %d\n", parser->state);
+            abort();
+        }
+
+        token = strtok(NULL, delimeter);
     }
 
-    return parser->state;
+    if (parser->state == parser_done)
+    {
+        return 0;
+    }
+    else
+    {
+        parser->state = parser_error_request_line;
+        return 1;
+    }
 }
 
 const char *parse_error(enum parser_state state)
@@ -362,6 +460,6 @@ void http_parser_print_information(struct http_parser *parser)
     printf("\t");
 
     /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
-    printf("%X", calcParity(request->body,sizeof(request->body)));
+    printf("%X", calcParity(request->body, sizeof(request->body)));
     printf("\t");
 }
