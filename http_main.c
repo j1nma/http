@@ -15,17 +15,17 @@ int main(int argc, char **argv)
     if (!fp)
     {
         fprintf(stderr, "Error: file open failed for '%s'.\n", argv[1]);
-        return 1;
+        return -1;
     }
 
     int error = http_parser_parse(&parser, fp);
 
     if (error != 0)
     {
-        return 1;
+        return error;
     }
 
     http_parser_print_information(&parser);
-    
+
     return 0;
 }

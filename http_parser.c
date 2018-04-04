@@ -23,7 +23,7 @@ static int calcParity(uint8_t *ptr, ssize_t size)
     return b;
 }
 
-int method(struct http_parser *p, const char *s)
+int method(struct http_parser *p, char *s)
 {
     int len = sizeof(request_methods) / sizeof(request_methods[0]);
     int i;
@@ -48,7 +48,7 @@ int method(struct http_parser *p, const char *s)
     return 1;
 }
 
-int uri(struct http_parser *p, const char *s)
+int uri(struct http_parser *p, char *s)
 {
 
     p->request->uri = s;
@@ -56,7 +56,7 @@ int uri(struct http_parser *p, const char *s)
     return 1;
 }
 
-int protocol_version(struct http_parser *p, const char *s)
+int protocol_version(struct http_parser *p, char *s)
 {
     int len = sizeof(protocol_versions) / sizeof(protocol_versions[0]);
     int i;
@@ -67,7 +67,7 @@ int protocol_version(struct http_parser *p, const char *s)
 
         sc = strcmp(protocol_versions[i], s);
 
-        if (!sc)
+        if (sc == 0)
         {
             p->request->protocol_version = protocol_versions[i];
         }
@@ -81,19 +81,19 @@ int protocol_version(struct http_parser *p, const char *s)
     return 1;
 }
 
-int header_fields(struct http_parser *p, const char *s)
+int header_fields(struct http_parser *p, char *s)
 {
 
     return 1;
 }
 
-int empty_line(struct http_parser *p, const char *s)
+int empty_line(struct http_parser *p, char *s)
 {
 
     return 1;
 }
 
-int message_body(struct http_parser *p, const char *s)
+int message_body(struct http_parser *p, char *s)
 {
 
     return 1;
@@ -105,7 +105,6 @@ http_parser_init(struct http_parser *p)
     struct http_parser parser;
     parser.state = parser_request_line;
     parser.request = malloc(sizeof(parser.request));
-    parser.request->header_map = hashmap_new();
 
     *p = parser;
 }
@@ -122,13 +121,15 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
     {
         line = strtok(buf, delimeter);
 
+        printf("current line: %s\n", line);
+
         while (line)
         {
             error = http_parser_feed_line(parser, line);
-            if (error == 1)
+            if (error == -1)
             {
-                fprintf(stderr, "Error: parsing line\n");
-                return 1;
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
             }
             line = strtok(NULL, delimeter);
         }
@@ -144,27 +145,48 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
     }
     if (fp != stdin)
     {
-        fclose(fp); /* close file if not stdin */
+        fclose(fp);
     }
 
     return 0;
 }
 
-int http_parser_feed_line(struct http_parser *parser, const char *line)
+int http_parser_feed_line(struct http_parser *parser, char *line)
 {
+    int error = 0;
+
     switch (parser->state)
     {
     case parser_request_line:
+
         parser->state = parser_method;
-        int error = http_parser_feed_request_line(parser, line);
-        if (error == 1)
+
+        error = http_parser_feed_request_line(parser, line);
+        if (error == -1)
         {
             fprintf(stderr, "Error: %s\n", parse_error(parser->state));
             return error;
         }
+        else
+        {
+            parser->state = parser_header_fields;
+            parser->request->header_map = hashmap_new();
+        }
+
         break;
 
     case parser_header_fields:
+
+        error = http_parser_feed_header_fields(parser, line);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+        else
+        {
+            parser->state = parser_empty_line;
+        }
 
         break;
     case parser_empty_line:
@@ -174,15 +196,22 @@ int http_parser_feed_line(struct http_parser *parser, const char *line)
 
         break;
     case parser_done:
-    case parser_error_unsupported_version:
-        // nada que hacer, nos quedamos en este estado
         break;
     default:
         fprintf(stderr, "unknown state %d\n", parser->state);
         abort();
     }
 
-    return parser->state;
+    if (parser->state == parser_done)
+    {
+        printf("Done http_parser_feed_line.\n");
+        return 0;
+    }
+    else
+    {
+        parser->state = parser_error_request_line;
+        return -1;
+    }
 }
 
 int http_parser_feed_request_line(struct http_parser *parser, char *line)
@@ -198,7 +227,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
     {
         fprintf(stderr, "Error: could not parse request line.\n");
         parser->state = parser_error_request_line;
-        return 1;
+        return -1;
     }
 
     while (token != NULL)
@@ -214,8 +243,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
             else
             {
                 parser->state = parser_error_unsupported_method;
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return 1;
+                return -1;
             }
             break;
 
@@ -227,8 +255,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
             else
             {
                 parser->state = parser_error_unsupported_uri;
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return 1;
+                return -1;
             }
 
             break;
@@ -240,12 +267,10 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
             else
             {
                 parser->state = parser_error_unsupported_protocol_version;
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return 1;
+                return -1;
             }
             break;
         case parser_done:
-        case parser_error_unsupported_version:
             break;
         default:
             fprintf(stderr, "Unknown state: %d\n", parser->state);
@@ -253,17 +278,20 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
         }
 
         token = strtok(NULL, delimeter);
+
+        if ((parser->state == parser_done && token != NULL) || (parser->state != parser_done && token == NULL))
+        {
+            fprintf(stderr, "Error: request line with wrong format\n");
+            return -1;
+        }
     }
 
-    if (parser->state == parser_done)
-    {
-        return 0;
-    }
-    else
-    {
-        parser->state = parser_error_request_line;
-        return 1;
-    }
+    return 0;
+}
+
+int http_parser_feed_header_fields(struct http_parser *parser, char *line)
+{
+    return 0;
 }
 
 const char *parse_error(enum parser_state state)
@@ -272,6 +300,9 @@ const char *parse_error(enum parser_state state)
 
     switch (state)
     {
+    case parser_error_request_line:
+        error_message = "error on request line";
+        break;
     case parser_error_unsupported_method:
         error_message = "unsupported method";
         break;
@@ -311,7 +342,7 @@ void http_parser_print_information(struct http_parser *parser)
 {
 
     struct http_request *request = parser->request;
-    header_map_t header_fields_map = request->header_map;
+    map_t header_fields_map = request->header_map;
 
     int error;
 
@@ -322,18 +353,37 @@ void http_parser_print_information(struct http_parser *parser)
     /** the host that must be used to make the connection (uri-host according to section 2.7. Resource Identifiers of RFC7230) **/
     char *host;
 
-    error = hashmap_get(header_fields_map, "Host", (void **)(&host));
-    assert(error == MAP_OK);
+    printf("header fields map length: %d\n", hashmap_length(header_fields_map));
 
-    printf("%s", host);
-    printf("\t");
+    if (hashmap_length(header_fields_map) > 0)
+    {
+        error = hashmap_get(header_fields_map, "Host", (void **)(&host));
+
+        if (error != MAP_OK)
+        {
+            fprintf(stderr, "Host not found.\n");
+            return;
+        }
+        else
+        {
+            printf("%s", host);
+            printf("\t");
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Error: header fields couldn't be retrieved.\n");
+        return;
+    }
 
     /** the port where the connection will be made (decimal) **/
     strtok(host, ":");
     char *port = strtok(NULL, ":");
     if (port == NULL)
     {
-        fprintf(stderr, "Port not found on host.\n");
+        /** Port not found on host: default goes to 80 **/
+        printf("%s", "80");
+        printf("\t");
     }
     else
     {
@@ -349,16 +399,14 @@ void http_parser_print_information(struct http_parser *parser)
     request_target = strtok(NULL, "/");
     if (request_target == NULL)
     {
-        fprintf(stderr, "Request-target not found on host.\n");
+        fprintf(stderr, "Request-target not found on uri.\n");
+        return;
     }
     else
     {
         printf("/%s", request_target);
         printf("\t");
     }
-
-    printf("%s", request_target);
-    printf("\t");
 
     /** the number of bytes of message body (decimal) **/
     char *message_body_bytes;
@@ -372,6 +420,13 @@ void http_parser_print_information(struct http_parser *parser)
     printf("\t");
 
     /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
-    printf("%X", calcParity(request->body, sizeof(request->body)));
-    printf("\t");
+    if (error == MAP_OK)
+    {
+        printf("%X", calcParity((uint8_t *)request->body, sizeof(request->body)));
+        printf("\t");
+    }
+    else
+    {
+        printf("%X", 0);
+    }
 }

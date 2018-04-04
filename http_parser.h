@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "buffer.h"
 #include "c_hashmap-master/hashmap.h"
 #include "header_fields.h"
 
@@ -17,20 +16,18 @@ extern char *request_methods[];
 /* Protocol Versions */
 extern char *protocol_versions[];
 
-typedef map_t header_map_t;
-
 struct http_request
 {
     /** request-line **/
-    const char *method_token;
-    const char *uri;
-    const char *protocol_version;
-
-    /** headers **/
-    header_map_t header_map;
+    char *method_token;
+    char *uri;
+    char *protocol_version;
 
     /** message body **/
-    const char *body;
+    char *body;
+
+    /** headers **/
+    map_t *header_map;
 };
 
 enum parser_state
@@ -54,7 +51,7 @@ enum parser_state
     parser_error_unsupported_header_fields,
     parser_error_unsupported_empty_line,
     parser_error_unsupported_message_body,
-    parser_error_unsupported_version,
+    parser_error_unsupported_version
 };
 
 struct http_parser
@@ -75,15 +72,32 @@ void http_parser_init(struct http_parser *parser);
    equal to the message body length is read or the connection is closed.  */
 int http_parser_parse(struct http_parser *parser, FILE *fp);
 
-int http_parser_feed_line(struct http_parser *parser, const char *line);
+int http_parser_feed_line(struct http_parser *parser, char *line);
 
 /** feed a request line  */
 int http_parser_feed_request_line(struct http_parser *parser, char *line);
+
+/** feed header fields by line **/
+int http_parser_feed_header_fields(struct http_parser *parser, char *line);
 
 /** get error message from enum parser_state **/
 const char *parse_error(enum parser_state state);
 
 /** print parser information **/
 void http_parser_print_information(struct http_parser *parser);
+
+/** all other functions **/
+
+int method(struct http_parser *p, char *s);
+
+int uri(struct http_parser *p, char *s);
+
+int protocol_version(struct http_parser *p, char *s);
+
+int header_fields(struct http_parser *p, char *s);
+
+int empty_line(struct http_parser *p, char *s);
+
+int message_body(struct http_parser *p, char *s);
 
 #endif
