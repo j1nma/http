@@ -115,23 +115,20 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
     char buf[BUFFER_SIZE] = "";
     char *delimeter = CRLF;
     char *line = buf;
-    int error = 0;
+    int error;
 
     while (fgets(buf, sizeof(buf), fp) != NULL)
     {
-        line = strtok(buf, delimeter);
+        /** when there are no tokens left to retrieve, strtok returns NULL **/
+        // line = strtok(buf, delimeter);
 
         printf("current line: %s\n", line);
 
-        while (line)
+        error = http_parser_feed_line(parser, line);
+        if (error == -1)
         {
-            error = http_parser_feed_line(parser, line);
-            if (error == -1)
-            {
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return error;
-            }
-            line = strtok(NULL, delimeter);
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
         }
     }
 
@@ -153,7 +150,7 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
 
 int http_parser_feed_line(struct http_parser *parser, char *line)
 {
-    int error = 0;
+    int error;
 
     switch (parser->state)
     {
@@ -177,19 +174,24 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
 
     case parser_header_fields:
 
+        /** if empty line with LF only is reached, header fields are done **/
+        if (line[0] == '\n')
+        {
+            parser->state = parser_empty_line;
+            break;
+        }
+
         error = http_parser_feed_header_fields(parser, line);
         if (error == -1)
         {
             fprintf(stderr, "Error: %s\n", parse_error(parser->state));
             return error;
         }
-        else
-        {
-            parser->state = parser_empty_line;
-        }
 
         break;
     case parser_empty_line:
+
+        parser->state = parser_done;
 
         break;
     case parser_message_body:
@@ -202,16 +204,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         abort();
     }
 
-    if (parser->state == parser_done)
-    {
-        printf("Done http_parser_feed_line.\n");
-        return 0;
-    }
-    else
-    {
-        parser->state = parser_error_request_line;
-        return -1;
-    }
+    return 0;
 }
 
 int http_parser_feed_request_line(struct http_parser *parser, char *line)
@@ -260,6 +253,9 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
 
             break;
         case parser_protocol_version:
+
+            token = strtok(token, CRLF);
+
             if (protocol_version(parser, token))
             {
                 parser->state = parser_done;
@@ -291,6 +287,45 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
 
 int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 {
+
+    int error;
+    char *field_name;
+    char *field_value;
+
+    field_name = malloc(sizeof(*field_name));
+    field_value = malloc(sizeof(*field_value));
+
+    char *delimeter = ": ";
+
+    line = strtok(line, CRLF);
+
+    field_name = strtok(line, delimeter);
+
+    if (field_name == NULL)
+    {
+        fprintf(stderr, "Error: could not parse header field name.\n");
+        parser->state = parser_error_header_field;
+        return -1;
+    }
+
+    field_value = strtok(NULL, delimeter);
+
+    if (field_value == NULL)
+    {
+        fprintf(stderr, "Error: could not parse header field value.\n");
+        parser->state = parser_error_header_field;
+        return -1;
+    }
+
+    error = hashmap_put(parser->request->header_map, field_name, field_value);
+
+    if (error != MAP_OK)
+    {
+        fprintf(stderr, "Error: parsing header field.\n");
+        parser->state = parser_error_header_field;
+        return -1;
+    }
+
     return 0;
 }
 
@@ -302,6 +337,9 @@ const char *parse_error(enum parser_state state)
     {
     case parser_error_request_line:
         error_message = "error on request line";
+        break;
+    case parser_error_header_field:
+        error_message = "error on header field";
         break;
     case parser_error_unsupported_method:
         error_message = "unsupported method";
