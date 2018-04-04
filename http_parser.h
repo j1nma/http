@@ -44,6 +44,7 @@ enum parser_state
     parser_done,
 
     parser_error_request_line,
+    parser_error_header_field,
 
     parser_error_unsupported_method,
     parser_error_unsupported_uri,
