@@ -7,8 +7,8 @@
 
 int main(int argc, char **argv)
 {
-    struct http_parser parser;
-    http_parser_init(&parser);
+    struct http_parser *parser;
+    parser = http_parser_init();
 
     FILE *fp = argc > 1 ? fopen(argv[1], "r") : stdin;
 
@@ -18,14 +18,16 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    int error = http_parser_parse(&parser, fp);
+    int error = http_parser_parse(parser, fp);
 
     if (error != 0)
     {
         return error;
     }
 
-    http_parser_print_information(&parser);
+    http_parser_print_information(parser);
+
+    http_parser_free(parser);
 
     return 0;
 }

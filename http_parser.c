@@ -10,6 +10,30 @@
 char *request_methods[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"};
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
+void printBits(size_t const size, void const *const ptr)
+{
+    unsigned char *b = (unsigned char *)ptr;
+    unsigned char byte;
+    int i, j;
+
+    for (i = size - 1; i >= 0; i--)
+    {
+        for (j = 7; j >= 0; j--)
+        {
+            byte = (b[i] >> j) & 1;
+            printf("%u", byte);
+        }
+    }
+    puts("");
+}
+
+static void removeSubstring(char *s, const char *toRemove)
+{
+    unsigned long toRemoveLen = strlen(toRemove);
+    while ((s = strstr(s, toRemove)))
+        memmove(s, s + toRemoveLen, 1 + strlen(s + toRemoveLen));
+}
+
 static int calcParity(uint8_t *ptr, ssize_t size)
 {
     unsigned char b = 0;
@@ -36,7 +60,7 @@ int method(struct http_parser *p, char *s)
 
         if (!sc)
         {
-            p->request->method_token = request_methods[i];
+            strcpy(p->request->method_token, request_methods[i]);
         }
     }
 
@@ -51,7 +75,7 @@ int method(struct http_parser *p, char *s)
 int uri(struct http_parser *p, char *s)
 {
 
-    p->request->uri = s;
+    strcpy(p->request->uri, s);
 
     return 1;
 }
@@ -69,7 +93,7 @@ int protocol_version(struct http_parser *p, char *s)
 
         if (sc == 0)
         {
-            p->request->protocol_version = protocol_versions[i];
+            strcpy(p->request->protocol_version, protocol_versions[i]);
         }
     }
 
@@ -81,32 +105,108 @@ int protocol_version(struct http_parser *p, char *s)
     return 1;
 }
 
-int header_fields(struct http_parser *p, char *s)
+struct http_parser *http_parser_init()
 {
+    struct http_parser *parser = malloc(sizeof(struct http_parser));
+    if (parser == NULL)
+    {
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
 
-    return 1;
+    parser->request = malloc(sizeof(struct http_request));
+    if (parser->request == NULL)
+    {
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+
+    parser->request->method_token = malloc(BUFFER_SIZE * sizeof(char));
+    if (parser->request->method_token == NULL)
+    {
+        free(parser->request);
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+    memset(parser->request->method_token, 0, sizeof(char) * BUFFER_SIZE);
+
+    parser->request->uri = malloc(BUFFER_SIZE * sizeof(char));
+    if (parser->request->uri == NULL)
+    {
+        free(parser->request->method_token);
+        free(parser->request);
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+    memset(parser->request->uri, 0, sizeof(char) * BUFFER_SIZE);
+
+    parser->request->protocol_version = malloc(BUFFER_SIZE * sizeof(char));
+    if (parser->request->protocol_version == NULL)
+    {
+        free(parser->request->uri);
+        free(parser->request->method_token);
+        free(parser->request);
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+    memset(parser->request->protocol_version, 0, sizeof(char) * BUFFER_SIZE);
+
+    parser->request->port = malloc(BUFFER_SIZE * sizeof(char));
+    if (parser->request->port == NULL)
+    {
+        free(parser->request->protocol_version);
+        free(parser->request->uri);
+        free(parser->request->method_token);
+        free(parser->request);
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+    memset(parser->request->port, 0, sizeof(char) * BUFFER_SIZE);
+
+    parser->request->body = malloc(BUFFER_SIZE * BUFFER_SIZE * sizeof(char));
+    if (parser->request->body == NULL)
+    {
+        free(parser->request->port);
+        free(parser->request->protocol_version);
+        free(parser->request->uri);
+        free(parser->request->method_token);
+        free(parser->request);
+        free(parser);
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
+    }
+    memset(parser->request->body, 0, sizeof(char) * BUFFER_SIZE * BUFFER_SIZE);
+
+    map_init(&parser->request->header_map);
+
+    parser->state = parser_request_line;
+
+    return parser;
 }
 
-int empty_line(struct http_parser *p, char *s)
+void http_parser_free(struct http_parser *parser)
 {
 
-    return 1;
-}
+    if (parser != NULL)
+    {
+        if (parser->request != NULL)
+        {
+            free(parser->request->method_token);
+            free(parser->request->uri);
+            free(parser->request->protocol_version);
+            free(parser->request->port);
+            free(parser->request->body);
+            map_deinit_((map_base_t *)&(parser->request->header_map));
+            free(parser->request);
+        }
 
-int message_body(struct http_parser *p, char *s)
-{
-
-    return 1;
-}
-
-extern void
-http_parser_init(struct http_parser *p)
-{
-    struct http_parser parser;
-    parser.state = parser_request_line;
-    parser.request = malloc(sizeof(parser.request));
-
-    *p = parser;
+        free(parser);
+    }
 }
 
 int http_parser_parse(struct http_parser *parser, FILE *fp)
@@ -120,9 +220,7 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
     while (fgets(buf, sizeof(buf), fp) != NULL)
     {
         /** when there are no tokens left to retrieve, strtok returns NULL **/
-        // line = strtok(buf, delimeter);
-
-        printf("current line: %s\n", line);
+        line = strtok(buf, delimeter);
 
         error = http_parser_feed_line(parser, line);
         if (error == -1)
@@ -134,12 +232,9 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
 
     if (ferror(fp))
     {
-        puts("I/O error when reading.");
+        fprintf(stderr, "I/O error when reading.");
     }
-    else if (feof(fp))
-    {
-        puts("End of file reached successfully.");
-    }
+
     if (fp != stdin)
     {
         fclose(fp);
@@ -167,7 +262,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         else
         {
             parser->state = parser_header_fields;
-            parser->request->header_map = hashmap_new();
+            // parser->request->header_map = hashmap_new();
         }
 
         break;
@@ -175,7 +270,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
     case parser_header_fields:
 
         /** if empty line with LF only is reached, header fields are done **/
-        if (line[0] == '\n')
+        if (line == NULL)
         {
             parser->state = parser_empty_line;
             break;
@@ -191,10 +286,17 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         break;
     case parser_empty_line:
 
-        parser->state = parser_done;
+        parser->state = parser_message_body;
 
         break;
     case parser_message_body:
+
+        error = http_parser_feed_body(parser, line);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
 
         break;
     case parser_done:
@@ -291,15 +393,28 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
     int error;
     char *field_name;
     char *field_value;
-
-    field_name = malloc(sizeof(*field_name));
-    field_value = malloc(sizeof(*field_value));
-
     char *delimeter = ": ";
 
-    line = strtok(line, CRLF);
+    field_name = malloc(BUFFER_SIZE);
+    if (field_name == NULL)
+    {
+        perror("Error allocating memory");
+        abort();
+    }
 
-    field_name = strtok(line, delimeter);
+    field_value = malloc(BUFFER_SIZE);
+    if (field_value == NULL)
+    {
+        perror("Error allocating memory");
+        abort();
+    }
+
+    memset(field_name, 0, BUFFER_SIZE);
+    memset(field_value, 0, BUFFER_SIZE);
+
+    strtok(line, CRLF);
+
+    strcpy(field_name, strtok(line, delimeter));
 
     if (field_name == NULL)
     {
@@ -308,7 +423,7 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
         return -1;
     }
 
-    field_value = strtok(NULL, delimeter);
+    strcpy(field_value, strtok(NULL, delimeter));
 
     if (field_value == NULL)
     {
@@ -317,13 +432,64 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
         return -1;
     }
 
-    error = hashmap_put(parser->request->header_map, field_name, field_value);
+    if (!strcmp(field_name, "Host"))
+    {
+        char *host_port = strtok(NULL, delimeter);
 
-    if (error != MAP_OK)
+        if (host_port == NULL)
+        {
+            strcpy(parser->request->port, "80");
+        }
+        else
+        {
+            strcpy(parser->request->port, host_port);
+        }
+    }
+
+    error = map_set(&parser->request->header_map, field_name, field_value);
+
+    if (error != 0)
     {
         fprintf(stderr, "Error: parsing header field.\n");
         parser->state = parser_error_header_field;
         return -1;
+    }
+
+    // free(field_value);
+    free(field_name);
+
+    return 0;
+}
+
+int http_parser_feed_body(struct http_parser *parser, char *line)
+{
+
+    int lineLen = strlen(line);
+    int bodySize = strlen(parser->request->body);
+    int bodyIndex = bodySize;
+
+    for (int i = 0; i < lineLen; i++, bodyIndex++)
+    {
+
+        /* Check if we need to expand. */
+        if (bodySize <= i)
+        {
+            bodySize = bodySize + 1;
+
+            char *tmp = NULL;
+            tmp = realloc(parser->request->body, bodySize);
+
+            if (!tmp)
+            {
+                parser->state = parser_error_body;
+                return -1;
+            }
+
+            parser->request->body = tmp;
+        }
+
+        /* Actually store the thing. */
+        parser->request->body[bodyIndex] = line[i];
     }
 
     return 0;
@@ -340,6 +506,9 @@ const char *parse_error(enum parser_state state)
         break;
     case parser_error_header_field:
         error_message = "error on header field";
+        break;
+    case parser_error_body:
+        error_message = "error on message body";
         break;
     case parser_error_unsupported_method:
         error_message = "unsupported method";
@@ -379,92 +548,81 @@ const char *parse_error(enum parser_state state)
 void http_parser_print_information(struct http_parser *parser)
 {
 
-    struct http_request *request = parser->request;
-    map_t header_fields_map = request->header_map;
-
-    int error;
-
     /** the method (section 3.1.1 Request Line of RFC7230) **/
-    printf("%s", request->method_token);
+    printf("%s", parser->request->method_token);
     printf("\t");
 
     /** the host that must be used to make the connection (uri-host according to section 2.7. Resource Identifiers of RFC7230) **/
-    char *host;
-
-    printf("header fields map length: %d\n", hashmap_length(header_fields_map));
-
-    if (hashmap_length(header_fields_map) > 0)
+    char **host = map_get(&parser->request->header_map, "Host");
+    if (host)
     {
-        error = hashmap_get(header_fields_map, "Host", (void **)(&host));
-
-        if (error != MAP_OK)
-        {
-            fprintf(stderr, "Host not found.\n");
-            return;
-        }
-        else
-        {
-            printf("%s", host);
-            printf("\t");
-        }
+        printf("%s\t", *host);
     }
     else
     {
-        fprintf(stderr, "Error: header fields couldn't be retrieved.\n");
+        fprintf(stderr, "Host not found.\n");
         return;
     }
 
     /** the port where the connection will be made (decimal) **/
-    strtok(host, ":");
-    char *port = strtok(NULL, ":");
-    if (port == NULL)
-    {
-        /** Port not found on host: default goes to 80 **/
-        printf("%s", "80");
-        printf("\t");
-    }
-    else
-    {
-        printf("%s", port);
-        printf("\t");
-    }
+
+    printf("%s\t", parser->request->port);
 
     /** the request-target in form origin-form (section 5.3 Request Target of RFC7230) **/
-    char *request_uri = request->uri;
+    char *request_uri = parser->request->uri;
     char *request_target;
 
-    strtok(request_uri, "http://");
-    request_target = strtok(NULL, "/");
-    if (request_target == NULL)
+    char *aux_request_target = malloc(BUFFER_SIZE);
+    if (aux_request_target == NULL)
     {
-        fprintf(stderr, "Request-target not found on uri.\n");
-        return;
+        perror("Error allocating memory");
+        abort();
+    }
+    memset(aux_request_target, 0, BUFFER_SIZE);
+
+    int prevLen = strlen(request_uri);
+    removeSubstring(request_uri, "http://");
+    int postLen = strlen(request_uri);
+    int hadHTTP = prevLen - postLen;
+
+    if (hadHTTP != 0)
+    {
+        strtok(request_uri, "/");
+
+        request_target = strtok(NULL, "/");
+
+        if (request_target == NULL)
+        {
+            fprintf(stderr, "Request-target not found on uri.\n");
+            return;
+        }
+
+        printf("/%s\t", request_target);
     }
     else
     {
-        printf("/%s", request_target);
-        printf("\t");
+        printf("%s\t", request_uri);
     }
 
     /** the number of bytes of message body (decimal) **/
-    char *message_body_bytes;
-    error = hashmap_get(header_fields_map, "Content-Length", (void **)(&message_body_bytes));
-    if (error == MAP_MISSING)
+    char **message_body_bytes = map_get(&parser->request->header_map, "Content-Length");
+    if (message_body_bytes)
     {
-        message_body_bytes = "0";
-    }
-
-    printf("%s", message_body_bytes);
-    printf("\t");
-
-    /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
-    if (error == MAP_OK)
-    {
-        printf("%X", calcParity((uint8_t *)request->body, sizeof(request->body)));
-        printf("\t");
+        printf("%s\t", *message_body_bytes);
     }
     else
     {
-        printf("%X", 0);
+        printf("%s\t", "0");
+    }
+
+    /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
+    if (message_body_bytes)
+    {
+        int parity = calcParity((uint8_t *)parser->request->body, strlen(parser->request->body) + 1);
+        printf("%X\n", parity);
+    }
+    else
+    {
+        printf("%02X", 0);
     }
 }

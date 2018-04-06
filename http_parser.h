@@ -2,13 +2,9 @@
 #define HTTP_PARSER_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
-#include "c_hashmap-master/hashmap.h"
+#include "map-master/src/map.h"
 #include "header_fields.h"
-
-static const uint8_t METHOD_NO_AUTHENTICATION_REQUIRED = 0x00;
-static const uint8_t METHOD_NO_ACCEPTABLE_METHODS = 0xFF;
 
 /* Request Methods */
 extern char *request_methods[];
@@ -22,12 +18,13 @@ struct http_request
     char *method_token;
     char *uri;
     char *protocol_version;
+    char *port;
 
     /** message body **/
     char *body;
 
     /** headers **/
-    map_t *header_map;
+    map_str_t header_map;
 };
 
 enum parser_state
@@ -45,6 +42,7 @@ enum parser_state
 
     parser_error_request_line,
     parser_error_header_field,
+    parser_error_body,
 
     parser_error_unsupported_method,
     parser_error_unsupported_uri,
@@ -57,13 +55,16 @@ enum parser_state
 
 struct http_parser
 {
-    struct http_request *request;
-
     enum parser_state state;
+
+    struct http_request *request;
 };
 
 /** initialize parser **/
-void http_parser_init(struct http_parser *parser);
+struct http_parser *http_parser_init(void);
+
+/** free parser **/
+void http_parser_free(struct http_parser *parser);
 
 /** The normal procedure for parsing an HTTP message is to read the
    start-line into a structure, read each header field into a hash table
@@ -80,6 +81,9 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line);
 
 /** feed header fields by line **/
 int http_parser_feed_header_fields(struct http_parser *parser, char *line);
+
+/** feed message body by line **/
+int http_parser_feed_body(struct http_parser *parser, char *line);
 
 /** get error message from enum parser_state **/
 const char *parse_error(enum parser_state state);
