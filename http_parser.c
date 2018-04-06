@@ -10,21 +10,21 @@
 char *request_methods[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"};
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
-void printBits(size_t const size, void const *const ptr)
+static char *concat(const char *s1, const char *s2)
 {
-    unsigned char *b = (unsigned char *)ptr;
-    unsigned char byte;
-    int i, j;
+    const size_t len1 = strlen(s1);
+    const size_t len2 = strlen(s2);
+    char *result = malloc(len1 + len2 + 1);
 
-    for (i = size - 1; i >= 0; i--)
+    if (result == NULL)
     {
-        for (j = 7; j >= 0; j--)
-        {
-            byte = (b[i] >> j) & 1;
-            printf("%u", byte);
-        }
+        fprintf(stderr, "Not enough memory\n");
+        return NULL;
     }
-    puts("");
+
+    memcpy(result, s1, len1);
+    memcpy(result + len1, s2, len2 + 1);
+    return result;
 }
 
 static void removeSubstring(char *s, const char *toRemove)
@@ -213,14 +213,11 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)
 {
 
     char buf[BUFFER_SIZE] = "";
-    char *delimeter = CRLF;
     char *line = buf;
     int error;
 
     while (fgets(buf, sizeof(buf), fp) != NULL)
     {
-        /** when there are no tokens left to retrieve, strtok returns NULL **/
-        line = strtok(buf, delimeter);
 
         error = http_parser_feed_line(parser, line);
         if (error == -1)
@@ -251,6 +248,8 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
     {
     case parser_request_line:
 
+        strtok(line, CRLF);
+
         parser->state = parser_method;
 
         error = http_parser_feed_request_line(parser, line);
@@ -262,15 +261,16 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         else
         {
             parser->state = parser_header_fields;
-            // parser->request->header_map = hashmap_new();
         }
 
         break;
 
     case parser_header_fields:
 
+        line = strtok(line, CRLF);
+
         /** if empty line with LF only is reached, header fields are done **/
-        if (line == NULL)
+        if (!line)
         {
             parser->state = parser_empty_line;
             break;
@@ -464,32 +464,13 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 int http_parser_feed_body(struct http_parser *parser, char *line)
 {
 
-    int lineLen = strlen(line);
-    int bodySize = strlen(parser->request->body);
-    int bodyIndex = bodySize;
+    parser->request->body = concat(parser->request->body, line);
 
-    for (int i = 0; i < lineLen; i++, bodyIndex++)
+    if (parser->request->body == NULL)
     {
-
-        /* Check if we need to expand. */
-        if (bodySize <= i)
-        {
-            bodySize = bodySize + 1;
-
-            char *tmp = NULL;
-            tmp = realloc(parser->request->body, bodySize);
-
-            if (!tmp)
-            {
-                parser->state = parser_error_body;
-                return -1;
-            }
-
-            parser->request->body = tmp;
-        }
-
-        /* Actually store the thing. */
-        parser->request->body[bodyIndex] = line[i];
+        fprintf(stderr, "Error: could not parse message body.\n");
+        parser->state = parser_error_body;
+        return -1;
     }
 
     return 0;
@@ -580,10 +561,10 @@ void http_parser_print_information(struct http_parser *parser)
     }
     memset(aux_request_target, 0, BUFFER_SIZE);
 
-    int prevLen = strlen(request_uri);
+    unsigned long prevLen = strlen(request_uri);
     removeSubstring(request_uri, "http://");
-    int postLen = strlen(request_uri);
-    int hadHTTP = prevLen - postLen;
+    unsigned long postLen = strlen(request_uri);
+    unsigned long hadHTTP = prevLen - postLen;
 
     if (hadHTTP != 0)
     {
@@ -618,7 +599,7 @@ void http_parser_print_information(struct http_parser *parser)
     /** one byte (hexadecimal format always showing the two octets in upper case) that is the product of applying XOR between all the bytes of the body of the order (initialized in 0). **/
     if (message_body_bytes)
     {
-        int parity = calcParity((uint8_t *)parser->request->body, strlen(parser->request->body) + 1);
+        int parity = calcParity((uint8_t *)parser->request->body, (ssize_t)strlen(parser->request->body) + 1);
         printf("%X\n", parity);
     }
     else
