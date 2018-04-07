@@ -60,8 +60,18 @@ struct http_parser
     struct http_request *request;
 };
 
+/** parse functions **/
+int method(struct http_parser *p, char *s);
+
+int uri(struct http_parser *p, char *s);
+
+int protocol_version(struct http_parser *p, char *s);
+
 /** initialize parser **/
 struct http_parser *http_parser_init(void);
+
+/** free header field value from map **/
+void free_header_fields_of_map(map_str_t map);
 
 /** free parser **/
 void http_parser_free(struct http_parser *parser);
@@ -90,19 +100,5 @@ const char *parse_error(enum parser_state state);
 
 /** print parser information **/
 void http_parser_print_information(struct http_parser *parser);
-
-/** all other functions **/
-
-int method(struct http_parser *p, char *s);
-
-int uri(struct http_parser *p, char *s);
-
-int protocol_version(struct http_parser *p, char *s);
-
-int header_fields(struct http_parser *p, char *s);
-
-int empty_line(struct http_parser *p, char *s);
-
-int message_body(struct http_parser *p, char *s);
 
 #endif

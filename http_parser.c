@@ -189,6 +189,18 @@ struct http_parser *http_parser_init()
     return parser;
 }
 
+void free_header_fields_of_map(map_str_t map)
+{
+    const char *key;
+    map_iter_t iter = map_iter(&map);
+
+    while ((key = map_next(&map, &iter)))
+    {
+
+        free(*map_get(&map, key));
+    }
+}
+
 void http_parser_free(struct http_parser *parser)
 {
 
@@ -201,6 +213,7 @@ void http_parser_free(struct http_parser *parser)
             free(parser->request->protocol_version);
             free(parser->request->port);
             free(parser->request->body);
+            free_header_fields_of_map(parser->request->header_map);
             map_deinit_((map_base_t *)&(parser->request->header_map));
             free(parser->request);
         }
@@ -300,6 +313,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
 
         break;
     case parser_done:
+        /** never reached because EOF ends line parsing **/
         break;
     default:
         fprintf(stderr, "unknown state %d\n", parser->state);
@@ -412,8 +426,6 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
     memset(field_name, 0, BUFFER_SIZE);
     memset(field_value, 0, BUFFER_SIZE);
 
-    strtok(line, CRLF);
-
     strcpy(field_name, strtok(line, delimeter));
 
     if (field_name == NULL)
@@ -455,7 +467,6 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
         return -1;
     }
 
-    // free(field_value);
     free(field_name);
 
     return 0;
@@ -530,8 +541,7 @@ void http_parser_print_information(struct http_parser *parser)
 {
 
     /** the method (section 3.1.1 Request Line of RFC7230) **/
-    printf("%s", parser->request->method_token);
-    printf("\t");
+    printf("%s\t", parser->request->method_token);
 
     /** the host that must be used to make the connection (uri-host according to section 2.7. Resource Identifiers of RFC7230) **/
     char **host = map_get(&parser->request->header_map, "Host");
@@ -552,14 +562,6 @@ void http_parser_print_information(struct http_parser *parser)
     /** the request-target in form origin-form (section 5.3 Request Target of RFC7230) **/
     char *request_uri = parser->request->uri;
     char *request_target;
-
-    char *aux_request_target = malloc(BUFFER_SIZE);
-    if (aux_request_target == NULL)
-    {
-        perror("Error allocating memory");
-        abort();
-    }
-    memset(aux_request_target, 0, BUFFER_SIZE);
 
     unsigned long prevLen = strlen(request_uri);
     removeSubstring(request_uri, "http://");
@@ -590,6 +592,7 @@ void http_parser_print_information(struct http_parser *parser)
     if (message_body_bytes)
     {
         printf("%s\t", *message_body_bytes);
+        free(*message_body_bytes);
     }
     else
     {
@@ -604,6 +607,6 @@ void http_parser_print_information(struct http_parser *parser)
     }
     else
     {
-        printf("%02X", 0);
+        printf("%02X\n", 0);
     }
 }
