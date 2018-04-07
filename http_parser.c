@@ -592,7 +592,6 @@ void http_parser_print_information(struct http_parser *parser)
     if (message_body_bytes)
     {
         printf("%s\t", *message_body_bytes);
-        free(*message_body_bytes);
     }
     else
     {
