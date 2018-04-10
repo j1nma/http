@@ -4,7 +4,7 @@ LD = $(CC)
 LDFLAGS =
 BINDIR = bin
 
-TARGET = http-request
+TARGET = http-response
 
 OBJECTS = $(patsubst %.c, %.o, $(shell find . -name "*.c"))
 
