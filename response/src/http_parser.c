@@ -28,26 +28,6 @@ static char *concat(const char *s1, const char *s2)
     return result;
 }
 
-static void removeSubstring(char *s, const char *toRemove)
-{
-    unsigned long toRemoveLen = strlen(toRemove);
-    while ((s = strstr(s, toRemove)))
-        memmove(s, s + toRemoveLen, 1 + strlen(s + toRemoveLen));
-}
-
-static int calcParity(uint8_t *ptr, ssize_t size)
-{
-    unsigned char b = 0;
-    int i;
-
-    for (i = 0; i < size; i++)
-    {
-        b ^= ptr[i];
-    }
-
-    return b;
-}
-
 int status_code(struct http_parser *p, char *stat)
 {
     strcpy(p->response->status, stat);
@@ -59,7 +39,6 @@ int protocol_version(struct http_parser *p, char *s) //ready
     int len = sizeof(protocol_versions) / sizeof(protocol_versions[0]);
     int i;
     int sc = 1;
-
     for (i = 0; i < len && sc; ++i)
     {
 
@@ -73,6 +52,7 @@ int protocol_version(struct http_parser *p, char *s) //ready
 
     if (sc != 0)
     {
+        printf("%s",s);
         return 0;
     }
 
@@ -96,7 +76,7 @@ struct http_parser *http_parser_init() //ready
         return NULL;
     }
 
-    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(int));
+    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(char));
     if (parser->response->status == NULL)
     {
         free(parser->response);
@@ -106,7 +86,7 @@ struct http_parser *http_parser_init() //ready
     }
     memset(parser->response->status, 0, sizeof(char) * MESSAGE_STATUS_SIZE);
 
-    parser->response->protocol_version = malloc(BUFFER_SIZE * sizeof(char));
+    parser->response->protocol_version = malloc(PROTOCOL_LENGTH * sizeof(char));
     if (parser->response->protocol_version == NULL)
     {
         free(parser->response->status);
@@ -115,7 +95,7 @@ struct http_parser *http_parser_init() //ready
         fprintf(stderr, "Not enough memory\n");
         return NULL;
     }
-    memset(parser->response->protocol_version, 0, sizeof(char) * BUFFER_SIZE);
+    memset(parser->response->protocol_version, 0, sizeof(char) * PROTOCOL_LENGTH);
 
     parser->response->body = malloc(BUFFER_SIZE * BUFFER_SIZE * sizeof(char));
     if (parser->response->body == NULL)
@@ -204,65 +184,64 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
 
     switch (parser->state)
     {
-    case parser_response_line:
+        case parser_response_line:
+            strtok(line, CRLF);
 
-        strtok(line, CRLF);
+            parser->state = parser_protocol_version;
 
-        parser->state = parser_protocol_version;
+            error = http_parser_feed_response_line(parser, line);
+            if (error == -1)
+            {
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
+            }
+            else
+            {
+                parser->state = parser_header_fields;
+            }
 
-        error = http_parser_feed_response_line(parser, line);
-        if (error == -1)
-        {
-            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-            return error;
-        }
-        else
-        {
-            parser->state = parser_header_fields;
-        }
-
-        break;
-
-    case parser_header_fields:
-
-        line = strtok(line, CRLF);
-
-        /** if empty line with LF only is reached, header fields are done **/
-        if (!line)
-        {
-            parser->state = parser_empty_line;
             break;
-        }
 
-        error = http_parser_feed_header_fields(parser, line);
-        if (error == -1)
-        {
-            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-            return error;
-        }
+        case parser_header_fields:
 
-        break;
-    case parser_empty_line:
+            line = strtok(line, CRLF);
 
-        parser->state = parser_message_body;
+            /** if empty line with LF only is reached, header fields are done **/
+            if (!line)
+            {
+                parser->state = parser_empty_line;
+                break;
+            }
 
-        break;
-    case parser_message_body:
+            error = http_parser_feed_header_fields(parser, line);
+            if (error == -1)
+            {
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
+            }
 
-        error = http_parser_feed_body(parser, line);
-        if (error == -1)
-        {
-            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-            return error;
-        }
+            break;
+        case parser_empty_line:
 
-        break;
-    case parser_done:
-        /** never reached because EOF ends line parsing **/
-        break;
-    default:
-        fprintf(stderr, "unknown state %d\n", parser->state);
-        abort();
+            parser->state = parser_message_body;
+
+            break;
+        case parser_message_body:
+
+            error = http_parser_feed_body(parser, line);
+            if (error == -1)
+            {
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
+            }
+
+            break;
+        case parser_done:
+            /** never reached because EOF ends line parsing **/
+            break;
+        default:
+            fprintf(stderr, "unknown state %d\n", parser->state);
+            abort();
     }
 
     return 0;
@@ -279,7 +258,7 @@ int http_parser_feed_response_line(struct http_parser *parser, char *line) //rea
 
     if (token == NULL)
     {
-        fprintf(stderr, "Error: could not parse request line.\n");
+        fprintf(stderr, "Error: could not parse response line.\n");
         parser->state = parser_error_response_line;
         return -1;
     }
@@ -289,40 +268,46 @@ int http_parser_feed_response_line(struct http_parser *parser, char *line) //rea
 
         switch (parser->state)
         {
-        case parser_protocol_version:
-            if (protocol_version(parser,line))
-            {
-                parser->state = parser_status_code;
-            }
-            else
-            {
-                parser->state = parser_error_unsupported_protocol_version;
-                return -1;
-            }
-            break;
+            case parser_protocol_version:
+                if (protocol_version(parser,line))
+                {
+                    parser->state = parser_status_code;
+                }
+                else
+                {
+                    parser->state = parser_error_unsupported_protocol_version;
+                    return -1;
+                }
+                break;
 
-        case parser_status_code:
-            if (status_code(parser, token))
-            {
+            case parser_status_code:
+                if (status_code(parser, token))
+                {
+                    parser->state = parser_ignore_msg;
+                }
+                else
+                {
+                    parser->state = parser_error_unsupported_state;
+                    return -1;
+                }
+                break;
+
+            case parser_ignore_msg:
+                while(token != NULL){
+                    token = strtok(NULL, CRLF);
+                }
                 parser->state = parser_done;
-            }
-            else
-            {
-                parser->state = parser_error_unsupported_state;
-                return -1;
-            }
-            break;
+                break;
 
-        default:
-            fprintf(stderr, "Unknown state: %d\n", parser->state);
-            abort();
+            default:
+                fprintf(stderr, "Unknown state: %d\n", parser->state);
+                abort();
         }
-
         token = strtok(NULL, delimeter);
 
         if ((parser->state == parser_done && token != NULL) || (parser->state != parser_done && token == NULL))
         {
-            fprintf(stderr, "Error: request line with wrong format\n");
+            fprintf(stderr, "Error: response line with wrong format\n");
             return -1;
         }
     }
@@ -442,7 +427,7 @@ void http_parser_print_information(struct http_parser *parser)
 
     /** the method (section 3.1.1 Request Line of RFC7230) **/
     printf("%s\t", parser->response->protocol_version);
-    printf("%s\t", parser->response->status);
+    printf("%s\t\n", parser->response->status);
     printf("%s\n", parser->response->body);
 
 }

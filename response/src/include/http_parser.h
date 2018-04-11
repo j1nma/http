@@ -30,6 +30,7 @@ enum parser_state
 
     parser_protocol_version,
     parser_status_code,
+    parser_ignore_msg,
 
     parser_done,
 
