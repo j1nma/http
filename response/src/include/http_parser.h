@@ -15,7 +15,6 @@ struct http_response
     char *status;
 
     /** message body **/
-    unsigned int body_length;
     char *body;
 
     /** headers **/
@@ -32,6 +31,11 @@ enum parser_state
     parser_protocol_version,
     parser_status_code,
     parser_ignore_msg,
+
+    parser_chunk_size,
+    parser_chunk_data,
+    parser_last_chunk,
+    parser_chunk_trailer_part,
 
     parser_done,
 
@@ -84,6 +88,9 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line);
 
 /** feed message body by line **/
 int http_parser_feed_body(struct http_parser *parser, char *line);
+
+/** decode chunked transfer enconding **/
+int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp);
 
 /** get error message from enum parser_state **/
 const char *parse_error(enum parser_state state);
