@@ -8,6 +8,8 @@
 #define CRLF                "\r\n"
 #define PROTOCOL_LENGTH     8
 #define MESSAGE_STATUS_SIZE 3
+#define TRUE                0
+#define EMPTY               -1
 
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
@@ -112,6 +114,7 @@ struct http_parser *http_parser_init() //ready
     map_init(&parser->response->header_map);
 
     parser->state = parser_response_line;
+    parser->response->body_length = EMPTY;
 
     return parser;
 }
@@ -221,11 +224,13 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
             }
 
             break;
+
         case parser_empty_line:
 
             parser->state = parser_message_body;
 
             break;
+
         case parser_message_body:
 
             error = http_parser_feed_body(parser, line);
@@ -234,11 +239,12 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
                 fprintf(stderr, "Error: %s\n", parse_error(parser->state));
                 return error;
             }
-
             break;
+
         case parser_done:
             /** never reached because EOF ends line parsing **/
             break;
+            
         default:
             fprintf(stderr, "unknown state %d\n", parser->state);
             abort();
@@ -374,8 +380,26 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 
 int http_parser_feed_body(struct http_parser *parser, char *line)
 {
+    /* Since version 1.1, HTTP protocol must parse Type-Encoding:chunked */
+    if(strcmp(parser->response->protocol_version, protocol_versions[1]) == TRUE && 
+                parser->response->body_length == EMPTY){
+        char **encoding = map_get(&parser->response->header_map, "Transfer-Encoding");
+        if(*encoding != NULL && strcmp(*encoding, "chunked") == TRUE){
+            parser->response->body_length = 0;
+        } else if(*encoding == NULL){
+            fprintf(stderr, "Error: HTTP 1.1 response must define Transfer-Encoding.\n");
+            parser->state = parser_error_transfer_encoding_missing;
+            return -1;
+        } else {
+            fprintf(stderr, "Error: Only `Transfer-Encoding: chunked´
+            supported.\n");
+            parser->state = parser_error_transfer_encoding_not_supported;
+            return -1;
+        }
+    }
 
     parser->response->body = concat(parser->response->body, line);
+    parser->response->body_length = parser->response->body_length + strlen(line);
 
     if (parser->response->body == NULL)
     {
@@ -424,10 +448,7 @@ const char *parse_error(enum parser_state state)
 
 void http_parser_print_information(struct http_parser *parser)
 {
-
-    /** the method (section 3.1.1 Request Line of RFC7230) **/
     printf("%s\t", parser->response->protocol_version);
     printf("%s\t\n", parser->response->status);
-    printf("%s\n", parser->response->body);
-
+    //printf("%s\n", parser->response->body);
 }

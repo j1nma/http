@@ -15,6 +15,7 @@ struct http_response
     char *status;
 
     /** message body **/
+    unsigned int body_length;
     char *body;
 
     /** headers **/
@@ -43,12 +44,13 @@ enum parser_state
     parser_error_unsupported_header_fields,
     parser_error_unsupported_empty_line,
     parser_error_unsupported_message_body,
+    parser_error_transfer_encoding_missing,
+    parser_error_transfer_encoding_not_supported,
 };
 
 struct http_parser
 {
     enum parser_state state;
-
     struct http_response *response;
 };
 
