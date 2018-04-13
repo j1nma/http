@@ -76,7 +76,7 @@ struct http_parser *http_parser_init() //ready
         return NULL;
     }
 
-    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(char));
+    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(char) + 1);
     if (parser->response->status == NULL)
     {
         free(parser->response);
@@ -84,9 +84,9 @@ struct http_parser *http_parser_init() //ready
         fprintf(stderr, "Not enough memory\n");
         return NULL;
     }
-    memset(parser->response->status, 0, sizeof(char) * MESSAGE_STATUS_SIZE);
+    memset(parser->response->status, 0, sizeof(char) * MESSAGE_STATUS_SIZE + 1);
 
-    parser->response->protocol_version = malloc(PROTOCOL_LENGTH * sizeof(char));
+    parser->response->protocol_version = malloc(PROTOCOL_LENGTH * sizeof(char) + 1);
     if (parser->response->protocol_version == NULL)
     {
         free(parser->response->status);
@@ -95,7 +95,7 @@ struct http_parser *http_parser_init() //ready
         fprintf(stderr, "Not enough memory\n");
         return NULL;
     }
-    memset(parser->response->protocol_version, 0, sizeof(char) * PROTOCOL_LENGTH);
+    memset(parser->response->protocol_version, 0, sizeof(char) * PROTOCOL_LENGTH + 1);
 
     parser->response->body = malloc(BUFFER_SIZE * BUFFER_SIZE * sizeof(char));
     if (parser->response->body == NULL)
@@ -416,7 +416,9 @@ int http_parser_feed_body(struct http_parser *parser, char *line)
     //     }
     // }
 
+	char * old_body = parser->response->body;
     parser->response->body = concat(parser->response->body, line);
+    free(old_body);
 
     if (parser->response->body == NULL)
     {
@@ -460,7 +462,9 @@ int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
         }
 
         /** append chunk-data to decoded-body **/
+        char * old_body = parser->response->body;
         parser->response->body = concat(parser->response->body, buffer);
+        free(old_body);
         if (parser->response->body == NULL)
         {
             fprintf(stderr, "Error: could not parse message body.\n");
