@@ -392,30 +392,6 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 int http_parser_feed_body(struct http_parser *parser, char *line)
 {
 
-    // char **encoding = map_get(&parser->response->header_map, "Transfer-Encoding");
-
-    // if (!strcmp(parser->response->protocol_version, protocol_versions[1]) &&
-    //     *encoding != NULL)
-    // {
-    //     if (!strcmp(*encoding, "chunked"))
-    //     {
-    //         int error = http_parser_decode_chunked(parser, line);
-    //         if (error == -1)
-    //         {
-    //             fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-    //             return error;
-    //         }
-
-    //         return 0;
-    //     }
-    //     else
-    //     {
-    //         fprintf(stderr, "Error: only 'Transfer-Encoding: chunked' supported.\n");
-    //         parser->state = parser_error_transfer_encoding_not_supported;
-    //         return -1;
-    //     }
-    // }
-
 	char * old_body = parser->response->body;
     parser->response->body = concat(parser->response->body, line);
     free(old_body);
@@ -432,10 +408,10 @@ int http_parser_feed_body(struct http_parser *parser, char *line)
 
 int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
 {
-    int chunk_size = 0;
+    size_t chunk_size = 0;
 
     /** read chunk-size, chunk-ext (if any), and CRLF **/
-    chunk_size = (int)strtol(line, NULL, 16);
+    chunk_size = (size_t)strtol(line, NULL, 16);
 
     while (chunk_size > 0)
     {
@@ -443,7 +419,7 @@ int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
         memset(buffer, 0, chunk_size + BUFFER_SIZE);
 
         /** read chunk-data **/
-        int error = fread(buffer, chunk_size, 1, fp);
+        size_t error = fread(buffer, chunk_size, 1, fp);
         if (error != 1)
         {
             fprintf(stderr, "Error: could not read chunk.\n");
@@ -477,7 +453,7 @@ int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
         strtok(new_chunk_size, CRLF);
 
         /** read chunk-size, chunk-ext (if any), and CRLF **/
-        chunk_size = (int)strtol(new_chunk_size, NULL, 16);
+        chunk_size = (size_t)strtol(new_chunk_size, NULL, 16);
     }
 
     /** read trailer field **/

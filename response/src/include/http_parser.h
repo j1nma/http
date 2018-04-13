@@ -55,6 +55,8 @@ struct http_parser
 };
 
 /** parse functions **/
+int status_code(struct http_parser *p, char *stat);
+
 int protocol_version(struct http_parser *p, char *s);
 
 /** initialize parser **/
