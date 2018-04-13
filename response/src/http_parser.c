@@ -34,7 +34,7 @@ int status_code(struct http_parser *p, char *stat)
     return 1;
 }
 
-int protocol_version(struct http_parser *p, char *s) 
+int protocol_version(struct http_parser *p, char *s)
 {
     int len = sizeof(protocol_versions) / sizeof(protocol_versions[0]);
     int i;
@@ -59,7 +59,7 @@ int protocol_version(struct http_parser *p, char *s)
     return 1;
 }
 
-struct http_parser *http_parser_init() 
+struct http_parser *http_parser_init()
 {
     struct http_parser *parser = malloc(sizeof(struct http_parser));
     if (parser == NULL)
@@ -116,7 +116,7 @@ struct http_parser *http_parser_init()
     return parser;
 }
 
-void free_header_fields_of_map(map_str_t map) 
+void free_header_fields_of_map(map_str_t map)
 {
     const char *key;
     map_iter_t iter = map_iter(&map);
@@ -128,7 +128,7 @@ void free_header_fields_of_map(map_str_t map)
     }
 }
 
-void http_parser_free(struct http_parser *parser) 
+void http_parser_free(struct http_parser *parser)
 {
 
     if (parser != NULL)
@@ -147,7 +147,7 @@ void http_parser_free(struct http_parser *parser)
     }
 }
 
-int http_parser_parse(struct http_parser *parser, FILE *fp) 
+int http_parser_parse(struct http_parser *parser, FILE *fp)
 {
 
     char buf[BUFFER_SIZE] = "";
@@ -251,7 +251,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line, FILE *fp)
     return 0;
 }
 
-int http_parser_feed_response_line(struct http_parser *parser, char *line) 
+int http_parser_feed_response_line(struct http_parser *parser, char *line)
 {
 
     char buf[BUFFER_SIZE] = "";
@@ -456,7 +456,7 @@ int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
         if (parser->response->body == NULL)
         {
             fprintf(stderr, "Error: could not parse message body.\n");
-            parser->state = parser_error_body;
+            parser->state = parser_error_chunk_decode_failed;
             return -1;
         }
 
@@ -494,6 +494,9 @@ const char *parse_error(enum parser_state state)
     case parser_error_body:
         error_message = "error on message body";
         break;
+    case parser_error_unsupported_state:
+        error_message = "unsupported state";
+        break;
     case parser_error_unsupported_protocol_version:
         error_message = "unsupported protocol version";
         break;
@@ -505,6 +508,9 @@ const char *parse_error(enum parser_state state)
         break;
     case parser_error_unsupported_message_body:
         error_message = "unsupported message body";
+        break;
+    case parser_error_transfer_encoding_not_supported:
+        error_message = "transfer-encoding not supported";
         break;
     case parser_error_chunk_decode_failed:
         error_message = "chunk decode failed";

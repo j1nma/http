@@ -43,7 +43,6 @@ enum parser_state
     parser_error_unsupported_header_fields,
     parser_error_unsupported_empty_line,
     parser_error_unsupported_message_body,
-    parser_error_transfer_encoding_missing,
     parser_error_transfer_encoding_not_supported,
     parser_error_chunk_decode_failed
 };
