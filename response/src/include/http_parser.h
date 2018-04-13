@@ -76,7 +76,7 @@ void http_parser_free(struct http_parser *parser);
    equal to the message body length is read or the connection is closed.  */
 int http_parser_parse(struct http_parser *parser, FILE *fp);
 
-int http_parser_feed_line(struct http_parser *parser, char *line);
+int http_parser_feed_line(struct http_parser *parser, char *line, FILE *fp);
 
 /** feed a request line  */
 int http_parser_feed_response_line(struct http_parser *parser, char *line);
@@ -85,7 +85,7 @@ int http_parser_feed_response_line(struct http_parser *parser, char *line);
 int http_parser_feed_header_fields(struct http_parser *parser, char *line);
 
 /** feed message body by line **/
-int http_parser_feed_body(struct http_parser *parser, char *line);
+int http_parser_feed_body(struct http_parser *parser, char *line, FILE *fp);
 
 /** decode chunked transfer enconding without trailer part **/
 int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp);
