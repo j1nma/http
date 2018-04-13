@@ -154,12 +154,18 @@ int http_parser_parse(struct http_parser *parser, FILE *fp) //ready
     char *line = buf;
     int error;
 
-    while (fgets(buf, sizeof(buf), fp) != NULL)
+    while (fgets(buf, sizeof(buf), fp) != NULL &&
+           parser->state != parser_done)
     {
 
         if (parser->state == parser_message_body)
         {
-            http_parser_decode_chunked(parser, line, fp);
+            error = http_parser_decode_chunked(parser, line, fp);
+            if (error == -1)
+            {
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
+            }
         }
         else
         {
@@ -424,38 +430,37 @@ int http_parser_feed_body(struct http_parser *parser, char *line)
 
 int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
 {
-    int length = 0;
     int chunk_size = 0;
 
-    /**   read chunk-size, chunk-ext (if any), and CRLF **/
+    /** read chunk-size, chunk-ext (if any), and CRLF **/
     chunk_size = (int)strtol(line, NULL, 16);
-
-    char buffer[chunk_size];
-
-    fprintf(stderr, "chunk size: %d\n", chunk_size);
 
     while (chunk_size > 0)
     {
+        char buffer[chunk_size + BUFFER_SIZE];
+        memset(buffer, 0, chunk_size + BUFFER_SIZE);
 
-        /** read chunk-data and CRLF **/
+        /** read chunk-data **/
         int error = fread(buffer, chunk_size, 1, fp);
         if (error != 1)
         {
-            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            fprintf(stderr, "Error: could not read chunk.\n");
+            parser->state = parser_error_chunk_decode_failed;
             return -1;
         }
 
-        char readCRLF[2];
-        error = fread(readCRLF, 2, 1, fp);
+        /** read CRLF **/
+        char readCRLF[1];
+        error = fread(readCRLF, 1, 1, fp);
         if (error != 1)
         {
-            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            fprintf(stderr, "Error: could not read CRLF.\n");
+            parser->state = parser_error_chunk_decode_failed;
             return -1;
         }
 
         /** append chunk-data to decoded-body **/
         parser->response->body = concat(parser->response->body, buffer);
-
         if (parser->response->body == NULL)
         {
             fprintf(stderr, "Error: could not parse message body.\n");
@@ -463,21 +468,21 @@ int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
             return -1;
         }
 
-        length = length + chunk_size;
+        char new_chunk_size[BUFFER_SIZE] = "";
+        fgets(new_chunk_size, sizeof(new_chunk_size), fp);
+        strtok(new_chunk_size, CRLF);
 
         /** read chunk-size, chunk-ext (if any), and CRLF **/
-        char next_chunk_size[BUFFER_SIZE] = "";
-        fgets(next_chunk_size, sizeof(next_chunk_size), fp);
-        chunk_size = (int)strtol(next_chunk_size, NULL, 16);
-
-        fprintf(stderr, "chunk size: %d\n", chunk_size);
+        chunk_size = (int)strtol(new_chunk_size, NULL, 16);
     }
 
     /** read trailer field **/
 
-    /** Content-Length := length **/
+    /** Content-Length = length **/
 
     /** Remove "chunked" from Transfer-Encoding **/
+
+    parser->state = parser_done;
 
     return 0;
 }
@@ -509,6 +514,9 @@ const char *parse_error(enum parser_state state)
     case parser_error_unsupported_message_body:
         error_message = "unsupported message body";
         break;
+    case parser_error_chunk_decode_failed:
+        error_message = "chunk decode failed";
+        break;
     default:
         error_message = "unsupported error message for state";
         break;
@@ -519,7 +527,5 @@ const char *parse_error(enum parser_state state)
 
 void http_parser_print_information(struct http_parser *parser)
 {
-    printf("%s\t", parser->response->protocol_version);
-    printf("%s\t\n", parser->response->status);
-    //printf("%s\n", parser->response->body);
+    printf("%s", parser->response->body);
 }

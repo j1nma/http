@@ -32,11 +32,6 @@ enum parser_state
     parser_status_code,
     parser_ignore_msg,
 
-    parser_chunk_size,
-    parser_chunk_data,
-    parser_last_chunk,
-    parser_chunk_trailer_part,
-
     parser_done,
 
     parser_error_response_line,
@@ -50,6 +45,7 @@ enum parser_state
     parser_error_unsupported_message_body,
     parser_error_transfer_encoding_missing,
     parser_error_transfer_encoding_not_supported,
+    parser_error_chunk_decode_failed
 };
 
 struct http_parser
@@ -89,7 +85,7 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line);
 /** feed message body by line **/
 int http_parser_feed_body(struct http_parser *parser, char *line);
 
-/** decode chunked transfer enconding **/
+/** decode chunked transfer enconding without trailer part **/
 int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp);
 
 /** get error message from enum parser_state **/
