@@ -6,19 +6,19 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Building
 
-Inside *http/request* folder after cloning repo:
+Inside *http/[request|response]* folder after cloning repo:
 
 ```
 make
 ```
 
-### Running inside *http/request*:
+### Running inside *http/[request|response]*:
 
 ```
-./bin/http_request examples/[EXAMPLE-FILE].txt
+bin/[http-request|http-response] examples/[EXAMPLE-FILE].txt
 ```
 
 ### References
 
-The hashmap implementation under *map-master* is used under MIT license:
+The hashmap implementation *map-master* is used under MIT license:
 https://github.com/rxi/map

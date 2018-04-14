@@ -4,12 +4,10 @@
 
 #include "include/http_parser.h"
 
-#define BUFFER_SIZE         256
-#define CRLF                "\r\n"
-#define PROTOCOL_LENGTH     8
+#define BUFFER_SIZE 256
+#define CRLF "\r\n"
+#define PROTOCOL_LENGTH 8
 #define MESSAGE_STATUS_SIZE 3
-#define TRUE                0
-#define EMPTY               -1
 
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
@@ -36,7 +34,7 @@ int status_code(struct http_parser *p, char *stat)
     return 1;
 }
 
-int protocol_version(struct http_parser *p, char *s) //ready
+int protocol_version(struct http_parser *p, char *s)
 {
     int len = sizeof(protocol_versions) / sizeof(protocol_versions[0]);
     int i;
@@ -54,14 +52,14 @@ int protocol_version(struct http_parser *p, char *s) //ready
 
     if (sc != 0)
     {
-        printf("%s",s);
+        printf("%s", s);
         return 0;
     }
 
     return 1;
 }
 
-struct http_parser *http_parser_init() //ready
+struct http_parser *http_parser_init()
 {
     struct http_parser *parser = malloc(sizeof(struct http_parser));
     if (parser == NULL)
@@ -78,7 +76,7 @@ struct http_parser *http_parser_init() //ready
         return NULL;
     }
 
-    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(char));
+    parser->response->status = malloc(MESSAGE_STATUS_SIZE * sizeof(char) + 1);
     if (parser->response->status == NULL)
     {
         free(parser->response);
@@ -86,9 +84,9 @@ struct http_parser *http_parser_init() //ready
         fprintf(stderr, "Not enough memory\n");
         return NULL;
     }
-    memset(parser->response->status, 0, sizeof(char) * MESSAGE_STATUS_SIZE);
+    memset(parser->response->status, 0, sizeof(char) * MESSAGE_STATUS_SIZE + 1);
 
-    parser->response->protocol_version = malloc(PROTOCOL_LENGTH * sizeof(char));
+    parser->response->protocol_version = malloc(PROTOCOL_LENGTH * sizeof(char) + 1);
     if (parser->response->protocol_version == NULL)
     {
         free(parser->response->status);
@@ -97,7 +95,7 @@ struct http_parser *http_parser_init() //ready
         fprintf(stderr, "Not enough memory\n");
         return NULL;
     }
-    memset(parser->response->protocol_version, 0, sizeof(char) * PROTOCOL_LENGTH);
+    memset(parser->response->protocol_version, 0, sizeof(char) * PROTOCOL_LENGTH + 1);
 
     parser->response->body = malloc(BUFFER_SIZE * BUFFER_SIZE * sizeof(char));
     if (parser->response->body == NULL)
@@ -114,12 +112,11 @@ struct http_parser *http_parser_init() //ready
     map_init(&parser->response->header_map);
 
     parser->state = parser_response_line;
-    parser->response->body_length = EMPTY;
 
     return parser;
 }
 
-void free_header_fields_of_map(map_str_t map) //ready
+void free_header_fields_of_map(map_str_t map)
 {
     const char *key;
     map_iter_t iter = map_iter(&map);
@@ -131,7 +128,7 @@ void free_header_fields_of_map(map_str_t map) //ready
     }
 }
 
-void http_parser_free(struct http_parser *parser)//ready
+void http_parser_free(struct http_parser *parser)
 {
 
     if (parser != NULL)
@@ -150,17 +147,18 @@ void http_parser_free(struct http_parser *parser)//ready
     }
 }
 
-int http_parser_parse(struct http_parser *parser, FILE *fp)//ready
+int http_parser_parse(struct http_parser *parser, FILE *fp)
 {
 
     char buf[BUFFER_SIZE] = "";
     char *line = buf;
     int error;
 
-    while (fgets(buf, sizeof(buf), fp) != NULL)
+    while (fgets(buf, sizeof(buf), fp) != NULL &&
+           parser->state != parser_done)
     {
 
-        error = http_parser_feed_line(parser, line);
+        error = http_parser_feed_line(parser, line, fp);
         if (error == -1)
         {
             fprintf(stderr, "Error: %s\n", parse_error(parser->state));
@@ -181,79 +179,79 @@ int http_parser_parse(struct http_parser *parser, FILE *fp)//ready
     return 0;
 }
 
-int http_parser_feed_line(struct http_parser *parser, char *line)
+int http_parser_feed_line(struct http_parser *parser, char *line, FILE *fp)
 {
     int error;
 
     switch (parser->state)
     {
-        case parser_response_line:
-            strtok(line, CRLF);
+    case parser_response_line:
+        strtok(line, CRLF);
 
-            parser->state = parser_protocol_version;
+        parser->state = parser_protocol_version;
 
-            error = http_parser_feed_response_line(parser, line);
-            if (error == -1)
-            {
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return error;
-            }
-            else
-            {
-                parser->state = parser_header_fields;
-            }
+        error = http_parser_feed_response_line(parser, line);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+        else
+        {
+            parser->state = parser_header_fields;
+        }
 
+        break;
+
+    case parser_header_fields:
+
+        line = strtok(line, CRLF);
+
+        /** if empty line with LF only is reached, header fields are done **/
+        if (!line)
+        {
+            parser->state = parser_empty_line;
             break;
+        }
 
-        case parser_header_fields:
+        error = http_parser_feed_header_fields(parser, line);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
 
-            line = strtok(line, CRLF);
+        break;
 
-            /** if empty line with LF only is reached, header fields are done **/
-            if (!line)
-            {
-                parser->state = parser_empty_line;
-                break;
-            }
+    case parser_empty_line:
 
-            error = http_parser_feed_header_fields(parser, line);
-            if (error == -1)
-            {
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return error;
-            }
+        parser->state = parser_message_body;
 
-            break;
+        break;
 
-        case parser_empty_line:
+    case parser_message_body:
 
-            parser->state = parser_message_body;
+        error = http_parser_feed_body(parser, line, fp);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+        break;
 
-            break;
+    case parser_done:
+        /** never reached because EOF ends line parsing **/
+        break;
 
-        case parser_message_body:
-
-            error = http_parser_feed_body(parser, line);
-            if (error == -1)
-            {
-                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
-                return error;
-            }
-            break;
-
-        case parser_done:
-            /** never reached because EOF ends line parsing **/
-            break;
-            
-        default:
-            fprintf(stderr, "unknown state %d\n", parser->state);
-            abort();
+    default:
+        fprintf(stderr, "unknown state %d\n", parser->state);
+        abort();
     }
 
     return 0;
 }
 
-int http_parser_feed_response_line(struct http_parser *parser, char *line) //ready
+int http_parser_feed_response_line(struct http_parser *parser, char *line)
 {
 
     char buf[BUFFER_SIZE] = "";
@@ -274,40 +272,41 @@ int http_parser_feed_response_line(struct http_parser *parser, char *line) //rea
 
         switch (parser->state)
         {
-            case parser_protocol_version:
-                if (protocol_version(parser,line))
-                {
-                    parser->state = parser_status_code;
-                }
-                else
-                {
-                    parser->state = parser_error_unsupported_protocol_version;
-                    return -1;
-                }
-                break;
+        case parser_protocol_version:
+            if (protocol_version(parser, line))
+            {
+                parser->state = parser_status_code;
+            }
+            else
+            {
+                parser->state = parser_error_unsupported_protocol_version;
+                return -1;
+            }
+            break;
 
-            case parser_status_code:
-                if (status_code(parser, token))
-                {
-                    parser->state = parser_ignore_msg;
-                }
-                else
-                {
-                    parser->state = parser_error_unsupported_state;
-                    return -1;
-                }
-                break;
+        case parser_status_code:
+            if (status_code(parser, token))
+            {
+                parser->state = parser_ignore_msg;
+            }
+            else
+            {
+                parser->state = parser_error_unsupported_state;
+                return -1;
+            }
+            break;
 
-            case parser_ignore_msg:
-                while(token != NULL){
-                    token = strtok(NULL, CRLF);
-                }
-                parser->state = parser_done;
-                break;
+        case parser_ignore_msg:
+            while (token != NULL)
+            {
+                token = strtok(NULL, CRLF);
+            }
+            parser->state = parser_done;
+            break;
 
-            default:
-                fprintf(stderr, "Unknown state: %d\n", parser->state);
-                abort();
+        default:
+            fprintf(stderr, "Unknown state: %d\n", parser->state);
+            abort();
         }
         token = strtok(NULL, delimeter);
 
@@ -378,28 +377,36 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
     return 0;
 }
 
-int http_parser_feed_body(struct http_parser *parser, char *line)
+int http_parser_feed_body(struct http_parser *parser, char *line, FILE *fp)
 {
-    /* Since version 1.1, HTTP protocol must parse Type-Encoding:chunked */
-    if(strcmp(parser->response->protocol_version, protocol_versions[1]) == TRUE && 
-                parser->response->body_length == EMPTY){
-        char **encoding = map_get(&parser->response->header_map, "Transfer-Encoding");
-        if(*encoding != NULL && strcmp(*encoding, "chunked") == TRUE){
-            parser->response->body_length = 0;
-        } else if(*encoding == NULL){
-            fprintf(stderr, "Error: HTTP 1.1 response must define Transfer-Encoding.\n");
-            parser->state = parser_error_transfer_encoding_missing;
-            return -1;
-        } else {
-            fprintf(stderr, "Error: Only `Transfer-Encoding: chunked´
-            supported.\n");
+
+    char **encoding = map_get(&parser->response->header_map, "Transfer-Encoding");
+
+    if (!strcmp(parser->response->protocol_version, protocol_versions[1]) &&
+        *encoding != NULL)
+    {
+        if (!strcmp(*encoding, "chunked"))
+        {
+            int error = http_parser_decode_chunked(parser, line, fp);
+            if (error == -1)
+            {
+                fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+                return error;
+            }
+
+            return 0;
+        }
+        else
+        {
+            fprintf(stderr, "Error: only 'Transfer-Encoding: chunked' supported.\n");
             parser->state = parser_error_transfer_encoding_not_supported;
             return -1;
         }
     }
 
+    char *old_body = parser->response->body;
     parser->response->body = concat(parser->response->body, line);
-    parser->response->body_length = parser->response->body_length + strlen(line);
+    free(old_body);
 
     if (parser->response->body == NULL)
     {
@@ -407,6 +414,67 @@ int http_parser_feed_body(struct http_parser *parser, char *line)
         parser->state = parser_error_body;
         return -1;
     }
+
+    return 0;
+}
+
+int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp)
+{
+    size_t chunk_size = 0;
+
+    /** read chunk-size, chunk-ext (if any), and CRLF **/
+    chunk_size = (size_t)strtol(line, NULL, 16);
+
+    while (chunk_size > 0)
+    {
+        char buffer[chunk_size + BUFFER_SIZE];
+        memset(buffer, 0, chunk_size + BUFFER_SIZE);
+
+        /** read chunk-data **/
+        size_t error = fread(buffer, chunk_size, 1, fp);
+        if (error != 1)
+        {
+            fprintf(stderr, "Error: could not read chunk.\n");
+            parser->state = parser_error_chunk_decode_failed;
+            return -1;
+        }
+
+        /** read CRLF **/
+        char readCRLF[1];
+        error = fread(readCRLF, 1, 1, fp);
+        if (error != 1)
+        {
+            fprintf(stderr, "Error: could not read CRLF.\n");
+            parser->state = parser_error_chunk_decode_failed;
+            return -1;
+        }
+
+        /** append chunk-data to decoded-body **/
+        char *old_body = parser->response->body;
+        parser->response->body = concat(parser->response->body, buffer);
+        free(old_body);
+        if (parser->response->body == NULL)
+        {
+            fprintf(stderr, "Error: could not parse message body.\n");
+            parser->state = parser_error_chunk_decode_failed;
+            return -1;
+        }
+
+        char new_chunk_size[BUFFER_SIZE] = "";
+        fgets(new_chunk_size, sizeof(new_chunk_size), fp);
+        strtok(new_chunk_size, CRLF);
+
+        /** read chunk-size, chunk-ext (if any), and CRLF **/
+        chunk_size = (size_t)strtol(new_chunk_size, NULL, 16);
+    }
+
+    /** read trailer field **/
+
+    /** Content-Length = length **/
+
+    /** Remove "chunked" from Transfer-Encoding **/
+
+    parser->state = parser_done;
 
     return 0;
 }
@@ -426,6 +494,9 @@ const char *parse_error(enum parser_state state)
     case parser_error_body:
         error_message = "error on message body";
         break;
+    case parser_error_unsupported_state:
+        error_message = "unsupported state";
+        break;
     case parser_error_unsupported_protocol_version:
         error_message = "unsupported protocol version";
         break;
@@ -438,6 +509,12 @@ const char *parse_error(enum parser_state state)
     case parser_error_unsupported_message_body:
         error_message = "unsupported message body";
         break;
+    case parser_error_transfer_encoding_not_supported:
+        error_message = "transfer-encoding not supported";
+        break;
+    case parser_error_chunk_decode_failed:
+        error_message = "chunk decode failed";
+        break;
     default:
         error_message = "unsupported error message for state";
         break;
@@ -448,7 +525,5 @@ const char *parse_error(enum parser_state state)
 
 void http_parser_print_information(struct http_parser *parser)
 {
-    printf("%s\t", parser->response->protocol_version);
-    printf("%s\t\n", parser->response->status);
-    //printf("%s\n", parser->response->body);
+    printf("%s", parser->response->body);
 }

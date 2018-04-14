@@ -15,7 +15,6 @@ struct http_response
     char *status;
 
     /** message body **/
-    unsigned int body_length;
     char *body;
 
     /** headers **/
@@ -44,8 +43,8 @@ enum parser_state
     parser_error_unsupported_header_fields,
     parser_error_unsupported_empty_line,
     parser_error_unsupported_message_body,
-    parser_error_transfer_encoding_missing,
     parser_error_transfer_encoding_not_supported,
+    parser_error_chunk_decode_failed
 };
 
 struct http_parser
@@ -55,6 +54,8 @@ struct http_parser
 };
 
 /** parse functions **/
+int status_code(struct http_parser *p, char *stat);
+
 int protocol_version(struct http_parser *p, char *s);
 
 /** initialize parser **/
@@ -74,7 +75,7 @@ void http_parser_free(struct http_parser *parser);
    equal to the message body length is read or the connection is closed.  */
 int http_parser_parse(struct http_parser *parser, FILE *fp);
 
-int http_parser_feed_line(struct http_parser *parser, char *line);
+int http_parser_feed_line(struct http_parser *parser, char *line, FILE *fp);
 
 /** feed a request line  */
 int http_parser_feed_response_line(struct http_parser *parser, char *line);
@@ -83,7 +84,10 @@ int http_parser_feed_response_line(struct http_parser *parser, char *line);
 int http_parser_feed_header_fields(struct http_parser *parser, char *line);
 
 /** feed message body by line **/
-int http_parser_feed_body(struct http_parser *parser, char *line);
+int http_parser_feed_body(struct http_parser *parser, char *line, FILE *fp);
+
+/** decode chunked transfer enconding without trailer part **/
+int http_parser_decode_chunked(struct http_parser *parser, char *line, FILE *fp);
 
 /** get error message from enum parser_state **/
 const char *parse_error(enum parser_state state);
