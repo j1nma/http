@@ -11,6 +11,7 @@ OBJECTS = $(patsubst %.c, %.o, $(shell find . -name "*.c"))
 all: $(BINDIR)/$(TARGET)
 
 $(BINDIR)/$(TARGET): $(OBJECTS)
+	@mkdir -p $(@D)
 	@$(LD) -o $@ $^ $(LDFLAGS)
 	@echo "Linking complete!"
 
@@ -20,5 +21,5 @@ $(BINDIR)/$(TARGET): $(OBJECTS)
 
 .PHONY: clean
 clean:
-	@rm $(BINDIR)/$(TARGET) $(OBJECTS)
+	-@rm -f $(BINDIR)/$(TARGET) $(OBJECTS)
 	@echo "Executable and objects removed!"
