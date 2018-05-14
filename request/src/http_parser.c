@@ -475,7 +475,9 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 int http_parser_feed_body(struct http_parser *parser, char *line)
 {
 
+    char * prevBody = parser->request->body;
     parser->request->body = concat(parser->request->body, line);
+    free(prevBody);
 
     if (parser->request->body == NULL)
     {

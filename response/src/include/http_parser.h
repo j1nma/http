@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#include "../map-master/src/map.h"
+#include "map.h"
 
 /* Protocol Versions */
 extern char *protocol_versions[];
