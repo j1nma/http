@@ -475,7 +475,7 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
 int http_parser_feed_body(struct http_parser *parser, char *line)
 {
 
-    char * prevBody = parser->request->body;
+    char *prevBody = parser->request->body;
     parser->request->body = concat(parser->request->body, line);
     free(prevBody);
 
@@ -558,7 +558,6 @@ void http_parser_print_information(struct http_parser *parser)
     }
 
     /** the port where the connection will be made (decimal) **/
-
     printf("%s\t", parser->request->port);
 
     /** the request-target in form origin-form (section 5.3 Request Target of RFC7230) **/
@@ -610,4 +609,245 @@ void http_parser_print_information(struct http_parser *parser)
     {
         printf("%02X\n", 0);
     }
+}
+
+/** OCTET **/
+
+bool http_parser_request_is_done(const enum parser_state st, bool *errored)
+{
+    if (st >= parser_error_request_line && errored != 0)
+    {
+        *errored = true;
+    }
+    return st >= parser_done;
+}
+
+enum parser_state http_parser_consume(buffer *b, struct http_parser *parser, bool *errored)
+{
+    enum parser_state st = parser->state;
+
+    while (buffer_can_read(b))
+    {
+        const uint8_t c = buffer_read(b);
+
+        st = http_parser_feed(parser, c);
+
+        if (http_parser_request_is_done(st, errored))
+        {
+            break;
+        }
+    }
+
+    if (errored)
+    {
+        fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+    }
+
+    return st;
+}
+
+enum parser_state http_parser_feed(struct http_parser *parser, const uint8_t c)
+{
+
+    enum parser_state next;
+
+    switch (parser->state)
+    {
+    case parser_method:
+        if (method_octet(parser, c))
+        {
+            parser->state = parser_uri;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_method;
+            return -1;
+        }
+        break;
+
+    case parser_uri:
+        if (uri(parser, c))
+        {
+            parser->state = parser_protocol_version;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_uri;
+            return -1;
+        }
+
+        break;
+    case parser_protocol_version:
+
+        token = strtok(token, CRLF);
+
+        if (protocol_version(parser, token))
+        {
+            parser->state = parser_done;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_protocol_version;
+            return -1;
+        }
+        break;
+    case parser_header_fields:
+
+        // line = strtok(line, CRLF);
+
+        /** if empty line with LF only is reached, header fields are done **/
+        // if (!line)
+        // {
+        // parser->state = parser_empty_line;
+        // break;
+        // }
+
+        error = http_parser_feed_byte_to_header_fields(parser, c);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+
+        break;
+    case parser_empty_line:
+
+        parser->state = parser_message_body;
+
+        break;
+    case parser_message_body:
+
+        error = http_parser_feed_byte_to_body(parser, c);
+        if (error == -1)
+        {
+            fprintf(stderr, "Error: %s\n", parse_error(parser->state));
+            return error;
+        }
+
+        break;
+    case parser_done:
+        /** never reached because EOF ends line parsing **/
+        break;
+    default:
+        fprintf(stderr, "unknown state %d\n", parser->state);
+        abort();
+    }
+
+    return parser->state = next;
+}
+
+enum parser_state http_parser_feed_byte_to_request_line(struct http_parser *parser, const uint8_t c)
+{
+    enum parser_state next;
+
+    switch (parser->state)
+    {
+    case parser_method:
+        if (method(parser, token))
+        {
+            parser->state = parser_uri;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_method;
+            return -1;
+        }
+        break;
+
+    case parser_uri:
+        if (uri(parser, token))
+        {
+            parser->state = parser_protocol_version;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_uri;
+            return -1;
+        }
+
+        break;
+    case parser_protocol_version:
+
+        token = strtok(token, CRLF);
+
+        if (protocol_version(parser, token))
+        {
+            parser->state = parser_done;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_protocol_version;
+            return -1;
+        }
+        break;
+    case parser_done:
+        break;
+    default:
+        fprintf(stderr, "Unknown state: %d\n", parser->state);
+        abort();
+    }
+
+    return parser->state = next;
+}
+
+enum parser_state http_parser_feed_byte_to_header_fields(struct http_parser *parser, const uint8_t c)
+{
+}
+
+enum parser_state http_parser_feed_byte_to_body(struct http_parser *parser, const uint8_t c)
+{
+}
+
+int method_octet(struct http_parser *parser, char *s)
+{
+    enum parser_state next;
+
+    switch (parser->state)
+    {
+    case 'G':
+        if (method(parser, token))
+        {
+            parser->state = parser_uri;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_method;
+            return -1;
+        }
+        break;
+
+    case 'H':
+        if (uri(parser, token))
+        {
+            parser->state = parser_protocol_version;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_uri;
+            return -1;
+        }
+
+        break;
+    case 'P':
+
+        token = strtok(token, CRLF);
+
+        if (protocol_version(parser, token))
+        {
+            parser->state = parser_done;
+        }
+        else
+        {
+            parser->state = parser_error_unsupported_protocol_version;
+            return -1;
+        }
+        break;
+    case parser_done:
+        break;
+    default:
+        next = parser_error_unsupported_method;
+        break;
+    }
+
+    return parser->state = next;
 }

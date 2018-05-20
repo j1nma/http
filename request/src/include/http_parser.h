@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "map.h"
+#include "buffer.h"
 
 /* Request Methods */
 extern char *request_methods[];
@@ -99,5 +100,36 @@ const char *parse_error(enum parser_state state);
 
 /** print parser information **/
 void http_parser_print_information(struct http_parser *parser);
+
+/** OCTET **/
+
+/**
+ * Permite distinguir a quien usa socks_hello_parser_feed si debe seguir
+ * enviando caracters o no. 
+ *
+ * En caso de haber terminado permite tambien saber si se debe a un error
+ */
+bool http_parser_request_is_done(const enum parser_state st, bool *errored);
+
+/**
+ * por cada elemento del buffer llama a `request_parser_feed' hasta que
+ * el parseo se encuentra completo o se requieren mas bytes.
+ *
+ * @param errored parametro de salida. si es diferente de NULL se deja dicho
+ *   si el parsing se debió a una condición de error
+ */
+enum parser_state http_parser_consume(buffer *b, struct http_parser *parser, bool *errored);
+
+/** feeds byte to parser  */
+enum parser_state http_parser_feed(struct http_parser *parser, const uint8_t c);
+
+/** feed byte to request line  */
+enum parser_state http_parser_feed_byte_to_request_line(struct http_parser *parser, const uint8_t c);
+
+/** feed header fields by byte **/
+enum parser_state http_parser_feed_byte_to_header_fields(struct http_parser *parser, const uint8_t c);
+
+/** feed message body by byte **/
+enum parser_state http_parser_feed_byte_to_body(struct http_parser *parser, const uint8_t c);
 
 #endif
