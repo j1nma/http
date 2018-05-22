@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "map.h"
+#include "buffer.h"
 
 /* Request Methods */
 extern char *request_methods[];
@@ -81,7 +82,7 @@ void http_parser_free(struct http_parser *parser);
    determine if a message body is expected.  If a message body has been
    indicated, then it is read as a stream until an amount of octets
    equal to the message body length is read or the connection is closed.  */
-int http_parser_parse(struct http_parser *parser, FILE *fp);
+int http_parser_parse(struct http_parser *parser, buffer * buf);
 
 int http_parser_feed_line(struct http_parser *parser, char *line);
 
