@@ -8,7 +8,7 @@
 #define LINE_SIZE 1024
 #define CRLF "\r\n"
 
-char *request_methods[] = {"GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE"};
+char *request_methods[] = {"GET", "HEAD", "POST"};
 char *protocol_versions[] = {"HTTP/1.0", "HTTP/1.1"};
 
 static char *concat(const char *s1, const char *s2)
@@ -225,9 +225,6 @@ void http_parser_free(struct http_parser *parser)
 
 int http_parser_parse(struct http_parser *parser, buffer *bin)
 {
-
-    // char buf[BUFFER_SIZE] = "";
-    // char *line = buf;
     int error;
 
     char line_accumulator[LINE_SIZE];
@@ -261,6 +258,11 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
                 return error;
             }
 
+            if (parser->state == parser_message_body)
+            {
+                break;
+            }
+
             memset(line_accumulator, '\0', LINE_SIZE);
 
             foundLF = 0;
@@ -273,19 +275,12 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
             n += 1;
         }
 
-        // while (fgets(buf, sizeof(buf), fp) != NULL)
-        // {
     }
 
-    // if (ferror(fp))
-    // {
-    //     fprintf(stderr, "I/O error when reading.");
-    // }
-
-    // if (fp != stdin)
-    // {
-    //     fclose(fp);
-    // }
+    if (parser->state == parser_message_body)
+    {
+        printf("Now parse body...");
+    }
 
     return 0;
 }
@@ -346,7 +341,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         break;
     case parser_message_body:
 
-    printf("parser_message_body: %s\n", line);
+        printf("parser_message_body: %s\n", line);
 
         error = http_parser_feed_body(parser, line);
         if (error == -1)
