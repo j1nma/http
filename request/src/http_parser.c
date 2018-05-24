@@ -5,7 +5,7 @@
 #include "include/http_parser.h"
 
 #define BUFFER_SIZE 256
-#define LINE_SIZE 1024*8
+#define LINE_SIZE 1024 * 8
 #define CRLF "\r\n"
 
 char *request_methods[] = {"GET", "HEAD", "POST"};
@@ -231,6 +231,7 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
     int foundCR = 0;
     int foundLF = 0;
     int n = 0;
+
     while (buffer_can_read(bin))
     {
         uint8_t c = buffer_read(bin);
@@ -250,7 +251,7 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
         /* If LF is found, it's time to parse accumulated line. */
         if (foundLF)
         {
-            printf("Parser accumulated line: %s\n", line_accumulator);
+            // printf("Parser accumulated line: %s\n", line_accumulator);
 
             error = http_parser_feed_line(parser, line_accumulator);
             if (error == -1)
@@ -270,7 +271,6 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
             foundCR = 0;
 
             n = 0;
-
         }
         else
         {
@@ -286,7 +286,7 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
 
     if (parser->state == parser_message_body)
     {
-        printf("Now parse body...");
+        // printf("Now parse body...");
     }
 
     return 0;
@@ -318,7 +318,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
 
     case parser_header_fields:
 
-        printf("parser_header_fields: %s\n", line);
+        // printf("parser_header_fields: %s\n", line);
 
         /** If empty line with LF only is reached, header fields are done **/
         if (*line == '\n')
@@ -342,7 +342,7 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         break;
     case parser_message_body:
 
-        printf("parser_message_body: %s\n", line);
+        // printf("parser_message_body: %s\n", line);
 
         error = http_parser_feed_body(parser, line);
         if (error == -1)
@@ -367,7 +367,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
 {
 
     char buf[BUFFER_SIZE] = "";
-    char *delimeter = " \r\n";
+    char *delimeter = " \t\r\n";
     char *token = buf;
 
     token = strtok(line, delimeter);
@@ -381,6 +381,8 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
 
     while (token != NULL)
     {
+
+        // printf("token:%s\n", token);
 
         switch (parser->state)
         {
@@ -468,7 +470,8 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
     memset(field_name, 0, BUFFER_SIZE);
     memset(field_value, 0, BUFFER_SIZE);
 
-    strcpy(field_name, strtok(line, delimeter));
+    strcpy(field_name, strtok(line, ":"));
+    // printf("field name:%s\n", field_name);
 
     if (field_name == NULL)
     {
@@ -477,7 +480,7 @@ int http_parser_feed_header_fields(struct http_parser *parser, char *line)
         return -1;
     }
 
-    strcpy(field_value, strtok(NULL, delimeter));
+    strcpy(field_value, strtok(NULL, " \t"));
 
     if (field_value == NULL)
     {
