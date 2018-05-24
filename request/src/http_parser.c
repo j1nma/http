@@ -235,7 +235,8 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
     {
         uint8_t c = buffer_read(bin);
         snprintf(line_accumulator + n, sizeof(line_accumulator) - n, "%c", c);
-        /* Search for a CR or a CRLF */
+
+        /* Search for a \r\n or a \n */
         // if (c == '\r')
         // {
         //     foundCR = 1;
@@ -246,7 +247,7 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
             foundLF = 1;
         }
 
-        /* If CRLF is found, it's time to parse accumulated line. */
+        /* If LF is found, it's time to parse accumulated line. */
         if (foundLF)
         {
             printf("Parser accumulated line: %s\n", line_accumulator);
@@ -266,15 +267,21 @@ int http_parser_parse(struct http_parser *parser, buffer *bin)
             memset(line_accumulator, '\0', LINE_SIZE);
 
             foundLF = 0;
+            foundCR = 0;
 
             n = 0;
+
         }
         else
         {
-
             n += 1;
-        }
 
+            if (n == LINE_SIZE)
+            {
+                fprintf(stderr, "Error: %s.\n", "reached line size limit");
+                return -1;
+            }
+        }
     }
 
     if (parser->state == parser_message_body)
@@ -294,10 +301,6 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
     {
     case parser_request_line:
 
-        // ptr = strchr(line, '\n');
-
-        // printf("parser_request_line: %s\n", ptr);
-
         parser->state = parser_method;
 
         error = http_parser_feed_request_line(parser, line);
@@ -314,8 +317,6 @@ int http_parser_feed_line(struct http_parser *parser, char *line)
         break;
 
     case parser_header_fields:
-
-        // ptr = strchr(line, '\n');
 
         printf("parser_header_fields: %s\n", line);
 
@@ -366,7 +367,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
 {
 
     char buf[BUFFER_SIZE] = "";
-    char *delimeter = " ";
+    char *delimeter = " \r\n";
     char *token = buf;
 
     token = strtok(line, delimeter);
@@ -384,6 +385,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
         switch (parser->state)
         {
         case parser_method:
+
             if (method(parser, token))
             {
                 parser->state = parser_uri;
@@ -396,6 +398,7 @@ int http_parser_feed_request_line(struct http_parser *parser, char *line)
             break;
 
         case parser_uri:
+
             if (uri(parser, token))
             {
                 parser->state = parser_protocol_version;
