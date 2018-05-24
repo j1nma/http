@@ -5,7 +5,7 @@
 #include "include/http_parser.h"
 
 #define BUFFER_SIZE 256
-#define LINE_SIZE 1024
+#define LINE_SIZE 1024*8
 #define CRLF "\r\n"
 
 char *request_methods[] = {"GET", "HEAD", "POST"};

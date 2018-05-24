@@ -1,7 +1,7 @@
 TARGET = http-request
 
-CC = gcc
-CFLAGS = -Wall -fsanitize=address -fno-omit-frame-pointer -g
+CC = clang
+CFLAGS = -Wall -fsanitize=address -g -fno-omit-frame-pointer
 
 LINKER = $(CC)
 LFLAGS = -fsanitize=address
